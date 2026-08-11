@@ -10401,7 +10401,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
              : kind==='whistle' ? 'rgba(20,35,92,.95)' : kind==='good' ? 'rgba(23,138,74,.95)'
              : 'rgba(11,26,51,.92)';
     l.style.background = bg; l.textContent = text;
-    // Headline covers the top-centre instruction box, so hide the box while
+    // Headline covers the top-center instruction box, so hide the box while
     // it is up and fade it back in half a second after the headline clears.
     const banner=document.getElementById('tutorialBanner'); if(banner) banner.style.opacity='0';
     requestAnimationFrame(()=>{ l.style.opacity='1'; });
@@ -10459,20 +10459,20 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   function setPlayer(elm, x, y, pose, rot){ if(!elm) return; elm.dataset.x=x; elm.dataset.y=y; if(pose) elm.dataset.pose=pose; if(rot!=null) elm.dataset.rot=rot; if(typeof place==='function') place(elm); }
 
   // Starting line-ups: horizontal, feet on the goal line, heads toward the far
-  // end. One FIELD player of each colour sits in the centre of the goal (the
-  // goalie's usual spot) for the shortest path to the centre ball.
+  // end. One FIELD player of each color sits in the center of the goal (the
+  // goalie's usual spot) for the shortest path to the center ball.
   const BLUE_LINE_X = 2.9, WHITE_LINE_X = 26.1;
   const LINE_Y = [3, 6, 9, 18, 21];           // five outer field spots
   PX.spawnBlue = function(){
     const out=[];
-    out.push(spawn('B6','blue', BLUE_LINE_X, CY, 'h', 90));      // centre swimmer (shortest path)
+    out.push(spawn('B6','blue', BLUE_LINE_X, CY, 'h', 90));      // center swimmer (shortest path)
     LINE_Y.forEach((y,i)=> out.push(spawn('B'+(i+1),'blue', BLUE_LINE_X, y, 'h', 90)));
-    const gk = spawn('BG','goalie', BLUE_LINE_X, 15, 'h', 90);   // goalie lines up off-centre
+    const gk = spawn('BG','goalie', BLUE_LINE_X, 15, 'h', 90);   // goalie lines up off-center
     out.push(gk); out.forEach(fadeIn); return out;
   };
   PX.spawnWhite = function(){
     const out=[];
-    out.push(spawn('W6','white', WHITE_LINE_X, CY, 'h', 270));   // centre swimmer
+    out.push(spawn('W6','white', WHITE_LINE_X, CY, 'h', 270));   // center swimmer
     LINE_Y.forEach((y,i)=> out.push(spawn('W'+(i+1),'white', WHITE_LINE_X, y, 'h', 270)));
     const gk = spawn('WG','goalie', WHITE_LINE_X, 15, 'h', 270);
     out.push(gk); out.forEach(fadeIn); return out;
@@ -10634,10 +10634,19 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
      Field-Zone "Offense" overlay + smart-positioning facings.
      ===================================================================== */
   function zonePt(phiDeg, r){ const phi=phiDeg*Math.PI/180; return { x:BLUE_GOAL.x + r*Math.cos(phi), y:BLUE_GOAL.y + r*Math.sin(phi) }; }
-  // zone mid-angles for z1..z5 (36° wedges, -90..90), centre = z6
+  // zone mid-angles for z1..z5 (36° wedges, -90..90), center = z6
   const ZONE_ANGLE = { z1:-72, z2:-36, z3:0, z4:36, z5:72 };
   function zoneCentroid(id){ return zonePt(ZONE_ANGLE[id], (FZ_INNER+FZ_OUTER)/2); }
 
+  // Move while staying VERTICAL and continuously facing the ball point
+  // (a smart-positioned goalkeeper tracking the play).
+  function swimVerticalTrack(elm, to, ms, ballPt){
+    return new Promise(res=>{
+      if(!elm){ res(); return; }
+      elm.dataset.pose='v'; const from={x:+elm.dataset.x,y:+elm.dataset.y};
+      tween((x,y)=>{ elm.dataset.x=x; elm.dataset.y=y; elm.dataset.rot=faceTo(x,y, ballPt.x, ballPt.y); if(typeof place==='function') place(elm); }, from, to, ms||600, ()=>{ elm.dataset.rot=faceTo(+elm.dataset.x,+elm.dataset.y, ballPt.x, ballPt.y); if(typeof place==='function') place(elm); res(); });
+    });
+  }
   PX.setupOffense = async function(){
     // Blend in the field zones they are swimming to, THEN swim (each ~5s).
     if(typeof selectFieldZoneSet==='function'){
@@ -10676,20 +10685,20 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       const br=faceTo(dp.x,dp.y, c.x,c.y);                            // defender faces attacker
       anims.push(swimSettle(b, dp, 5000, br, 'v'));
     });
-    // Centre couple (zone 6): white centre at 2.5m facing OUT to the ball;
-    // blue centre defender behind (between centre and goal), also facing ball.
+    // Centre couple (zone 6): white center at 2.5m facing OUT to the ball;
+    // blue center defender behind (between center and goal), also facing ball.
     const ballCarrierPt = zoneCentroid('z4');
     const cW={ x:BLUE_GOAL.x+2.5, y:CY };
     const cWrot=faceTo(cW.x,cW.y, ballCarrierPt.x,ballCarrierPt.y);
     anims.push(swimSettle(centerWhite, cW, 5000, cWrot, 'v'));
-    const cB={ x:cW.x-0.9, y:CY };   // just behind the centre, in contact — not up against the keeper
+    const cB={ x:cW.x-0.9, y:CY };   // just behind the center, in contact — not up against the keeper
     const blueCenterDef = blues.filter(b=>usedBlue.indexOf(b)<0)[0];
     const cBrot=faceTo(cB.x,cB.y, ballCarrierPt.x,ballCarrierPt.y);
     anims.push(swimSettle(blueCenterDef, cB, 5000, cBrot, 'v'));
 
     // Goalkeepers
     const bgk=blueGoalie(), wgk=whiteGoalie();
-    if(bgk){ const gp={x:BLUE_GOAL.x+0.6,y:CY}; anims.push(swimSettle(bgk, gp, 5000, faceTo(gp.x,gp.y, ballCarrierPt.x,ballCarrierPt.y), 'v')); } // blue GK: swims horizontal, settles vertical near the line
+    if(bgk){ const gp={x:BLUE_GOAL.x+0.6,y:CY}; anims.push(swimVerticalTrack(bgk, gp, 5000, ballCarrierPt)); } // blue GK: immediately vertical, staying smart-positioned to the ball
     if(wgk){ anims.push(swimSettle(wgk, {x:WHITE_GOAL.x-4, y:CY}, 5000, 270, 'h')); }                                                            // white GK: horizontal, 4m ahead, central
 
     await Promise.all(anims);
@@ -10728,7 +10737,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       ()=>{ PX.spawnWhite(); }));
 
     // 1.6 The bench
-    steps.push(watch('Teams also have substitute players who can enter during the game.',
+    steps.push(watch('Teams usually have six substitute players who can rotate in and out following certain guidelines. In some competitions the number of substitutes can be higher.',
       ()=>{ PX.flash('SUBSTITUTES','',1200); }));
 
     // 1.7 Referees — white circles R1/R2, spotlight then red-circle arrows; "Got it" to advance
@@ -10736,13 +10745,14 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       function(){ PX.showReferees(); PX.refereeIntro(); }));
 
     // 1.8 Ready to start
-    steps.push(watch('Each period starts with the teams at opposite ends of the pool, and the ball in the centre.',
-      ()=>{ PX.clearRefIntro(); PX.centerBall(); setTimeout(PX.whistle, 600); }));
+    steps.push(watch('Each period starts with the teams at opposite ends of the pool, and the ball in the center.',
+      ()=>{ PX.clearRefIntro(); PX.centerBall(); }));
 
-    // 1.9a YOU TRY — swim-off: move the White centre player toward the ball
+    // 1.9a YOU TRY — swim-off: move the White center player toward the ball
     steps.push({
-      instruction:'The swim-off! Move the White player in the centre of the goal towards the ball in the centre of the pool.',
+      instruction:'The swim-off! Move the White player in the center of the goal towards the ball in the center of the pool.',
       bannerSide:'top', skipDimPhase:false,
+      onEnter:function(){ PX.whistle(); },   // whistle bubble first, then the move instruction fades in
       highlight: ()=> '.player[data-team="white"][data-label="W6"]',
       validate:{ type:'custom', fn:function(){ const w=whiteCenter(); if(!w) return false; const b=ballObj(); return Math.hypot((+w.dataset.x)-b.x,(+w.dataset.y)-b.y) <= 8; } }
     });
@@ -10759,13 +10769,13 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     steps.push({
       instruction:'White has the ball and attacks the Blue goal. The teams set up: White in attack, Blue defending each zone.',
       bannerSide:'top', skipDimPhase:true, highlight:null, skipSuccessMessage:true,
-      onEnter:function(){ PX._setupDone=false; PX.setupOffense().then(()=>{ PX.flash('OFFENCE SET UP','good',1400); PX._setupDone=true; }); },
+      onEnter:function(){ PX._setupDone=false; PX.setupOffense().then(()=>{ PX.flash('OFFENSE SET UP','good',1400); PX._setupDone=true; }); },
       validate:{ type:'custom', fn:()=> PX._setupDone===true }
     });
 
     // 1.11 YOU TRY — tap the Blue goalkeeper (the defending keeper, two-hand privilege)
     steps.push({
-      instruction:'One player may touch the ball with two hands inside their own 6-metre area. Tap the Blue goalkeeper.',
+      instruction:'One player may touch the ball with two hands inside their own 6-meter area. Tap the Blue goalkeeper.',
       bannerSide:'top', skipDimPhase:false,
       highlight: ()=> { const g=blueGoalie(); return g ? ('.player[data-label="'+g.dataset.label+'"]') : '.player[data-team="goalie"]'; },
       onEnter:function(){ PX._gkTapped=false;
@@ -10826,7 +10836,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   }
   function currentWhiteShooter(){ return (typeof ballCarrier!=='undefined'&&ballCarrier&&ballCarrier.dataset.team==='white')?ballCarrier:whiteFields()[0]; }
   // Put the shooter at a clear angle to the goal so a near corner is genuinely
-  // open past the centred keeper (teaches "aim where the keeper isn't").
+  // open past the centered keeper (teaches "aim where the keeper isn't").
   function setShooter(){
     const s=currentWhiteShooter();
     if(s){ setPlayer(s, 6, 8.5, 'v', faceTo(6,8.5, BLUE_GOAL.x, BLUE_GOAL.y)); if(typeof moveBallTo==='function') moveBallTo(s,'right'); }
@@ -10845,13 +10855,37 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     PX.flash('BLUE POSSESSION','',1600);
   }
 
+  // Guarantees the offense/defense board exists — used when Lesson 2 is entered
+  // directly (Next lesson), and as a safety net so the field is never empty at
+  // the Lesson 1 -> 2 hand-off. No-op during normal continuous play.
+  PX.ensureOffenseBoard = function(){
+    if(qa('.player').length >= 12) return;
+    PX.clearActors();
+    const ballPt = zoneCentroid('z4');
+    const whites=[], blues=[];
+    ['z1','z2','z3','z4','z5'].forEach((z,i)=>{
+      const c=zoneCentroid(z);
+      whites.push(makePlayer(['W'+(i+1),'white', c.x, c.y, 'v', faceTo(c.x,c.y, BLUE_GOAL.x,BLUE_GOAL.y)]));
+      const dirx=BLUE_GOAL.x-c.x, diry=BLUE_GOAL.y-c.y, dl=Math.hypot(dirx,diry)||1;
+      const dp={x:c.x+dirx/dl, y:c.y+diry/dl};
+      blues.push(makePlayer(['B'+(i+1),'blue', dp.x, dp.y, 'v', faceTo(dp.x,dp.y, c.x,c.y)]));
+    });
+    const cW={x:BLUE_GOAL.x+2.5,y:CY};
+    whites.push(makePlayer(['W6','white', cW.x, cW.y, 'v', faceTo(cW.x,cW.y, ballPt.x,ballPt.y)]));
+    const cB={x:cW.x-0.9,y:CY};
+    blues.push(makePlayer(['B6','blue', cB.x, cB.y, 'v', faceTo(cB.x,cB.y, ballPt.x,ballPt.y)]));
+    makePlayer(['BG','goalie', BLUE_GOAL.x+0.6, CY, 'v', faceTo(BLUE_GOAL.x+0.6,CY, ballPt.x,ballPt.y)]);
+    makePlayer(['WG','goalie', WHITE_GOAL.x-4, CY, 'h', 270]);
+    if(typeof moveBallTo==='function') moveBallTo(whites[3], 'right');
+  };
+
   PX.buildLesson2Steps = function(){
     const steps=[];
     let drivePlayer=null, driveStartX=null;
 
     // 2.1 — blend the zones out, then show which goal White attacks
     steps.push(watch('Now the game is live. White protects the far goal — and attacks the Blue goal.',
-      ()=>{ PX.blendOutZones(); setTimeout(()=>{ pulseGoal('right','#1565c0',1500); setTimeout(()=>pulseGoal('left','#e8362a',1600), 1600); }, 800); }));
+      ()=>{ PX.field.setPhase('lines'); PX.ensureOffenseBoard(); PX.blendOutZones(); setTimeout(()=>{ pulseGoal('right','#1565c0',1500); setTimeout(()=>pulseGoal('left','#e8362a',1600), 1600); }, 800); }));
 
     // 2.2 YOU TRY — drive toward the attacking (left) goal
     steps.push({
@@ -10908,8 +10942,8 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     steps.push(watch('A goal is scored when the whole ball crosses the goal line, between the posts and under the crossbar.',
       ()=>{ PX.flash('GOAL!','goal',1600); }));
 
-    // 2.8 After the goal — restart at centre, Blue possession
-    steps.push(watch('After every goal the game restarts in the centre, and the team that conceded gets the ball. Blue now has possession.',
+    // 2.8 After the goal — restart at center, Blue possession
+    steps.push(watch('After every goal the game restarts in the center, and the team that conceded gets the ball. Blue now has possession.',
       ()=>{ restartToBlue(); }));
 
     // 2.9 YOU TRY — which goal is Blue attacking?
@@ -10941,11 +10975,11 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     const wC = whiteCenter(), bC = blueCenter();
     const otherW = whiteFields().filter(p=>p!==wC);
     const otherB = blueFields().filter(p=>p!==bC);
-    // Everyone swims forward: centre players race the ball; the rest stop 2m
-    // short of the middle line. Blue centre ends 0.5m from the ball as White arrives.
+    // Everyone swims forward: center players race the ball; the rest stop 2m
+    // short of the middle line. Blue center ends 0.5m from the ball as White arrives.
     const SWIM_MS = 5000;   // the swim-off takes about 5 seconds
     const anims=[];
-    // White centre stops half a metre short so its (right) hand meets the ball
+    // White center stops half a meter short so its (right) hand meets the ball
     // rather than swimming past it before passing.
     if(wC) anims.push(swim(wC, { x:MID_X+0.5, y:CY }, SWIM_MS, 'h'));
     if(bC) anims.push(swim(bC, { x:MID_X-0.5, y:CY }, SWIM_MS, 'h'));   // 0.5m short of the ball
@@ -10966,7 +11000,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   }
 
   /* =====================================================================
-     Instruction banner -> top-centre of the field (CSS override, no engine edit)
+     Instruction banner -> top-center of the field (CSS override, no engine edit)
      ===================================================================== */
   function injectBannerCss(){
     if(document.getElementById('pxBannerCss')) return;
@@ -10978,18 +11012,74 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   /* =====================================================================
      LAUNCH
      ===================================================================== */
+  // ---- Start screen: "Water Polo" bubble + yellow cursive "made easy!" ----
+  PX.showStartScreen = function(onStart){
+    if(document.getElementById('pxStartScreen')) return;
+    const ov=make('div'); ov.id='pxStartScreen';
+    ov.style.cssText='position:fixed;inset:0;z-index:9800;display:flex;flex-direction:column;align-items:center;justify-content:center;'
+      +'background:radial-gradient(circle at 50% 38%, #0a4d8c 0%, #06305a 58%, #041f3d 100%);';
+    const wrap=make('div'); wrap.style.cssText='position:relative;margin-bottom:84px;';
+    const bubble=make('div');
+    bubble.style.cssText='position:relative;background:#fff;color:#06305a;border-radius:30px;padding:34px 56px;'
+      +'font:900 clamp(34px,9vw,74px)/1 system-ui,sans-serif;box-shadow:0 18px 60px rgba(0,0,0,.45);';
+    bubble.textContent='Water Polo';
+    const tail=make('div'); tail.style.cssText='position:absolute;left:40px;bottom:-15px;width:32px;height:32px;background:#fff;transform:rotate(45deg);border-radius:6px;';
+    bubble.appendChild(tail);
+    const made=make('div'); made.textContent='made easy!';
+    made.style.cssText='position:absolute;right:-14px;bottom:-30px;transform:rotate(-12deg);'
+      +'font:italic 700 clamp(30px,8vw,60px)/1 "Brush Script MT","Segoe Script","Snell Roundhand","Comic Sans MS",cursive;'
+      +'color:#ffd23f;text-shadow:0 3px 12px rgba(0,0,0,.4);pointer-events:none;';
+    bubble.appendChild(made);
+    wrap.appendChild(bubble); ov.appendChild(wrap);
+    const btn=make('button'); btn.textContent='Get started!';
+    btn.style.cssText='font:800 20px system-ui;color:#06305a;background:#ffd23f;border:none;border-radius:999px;padding:16px 46px;cursor:pointer;box-shadow:0 10px 30px rgba(0,0,0,.35);letter-spacing:.03em;';
+    btn.addEventListener('click', ()=>{ ov.remove(); if(typeof onStart==='function') onStart(); });
+    ov.appendChild(btn);
+    document.body.appendChild(ov);
+  };
+
+  // ---- Persistent bottom-left navigation ----
+  PX.showNav = function(){
+    if(document.getElementById('pxNav')) return;
+    const nav=make('div'); nav.id='pxNav';
+    nav.style.cssText='position:fixed;left:12px;bottom:12px;z-index:9400;display:flex;flex-direction:column;gap:8px;';
+    const mk=(label,bg,fn)=>{ const b=make('button'); b.textContent=label;
+      b.style.cssText='font:700 13px system-ui;color:#fff;background:'+bg+';border:none;border-radius:10px;padding:10px 14px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.3);text-align:left;';
+      b.addEventListener('click',fn); return b; };
+    nav.appendChild(mk('Exit tutorial','#8a3a3a', PX.exitTutorial));
+    nav.appendChild(mk('Move to next lesson →','#1a6363', PX.nextLesson));
+    document.body.appendChild(nav);
+  };
+  PX.hideNav = function(){ const n=document.getElementById('pxNav'); if(n) n.remove(); };
+  PX.nextLesson = function(){
+    const starts=PX._lessonStarts||[0];
+    const cur=(typeof tutorialStepIndex!=='undefined')?tutorialStepIndex:0;
+    const next=starts.filter(s=>s>cur)[0];
+    if(next!=null && typeof goToTutorialStep==='function'){ if(typeof PX.shoot!=='undefined') PX.shoot.cancel&&PX.shoot.cancel(); if(PX.tap&&PX.tap.disarm) PX.tap.disarm(); goToTutorialStep(next); }
+    else PX.flash('That’s the last lesson so far','',1600);
+  };
+  PX.exitTutorial = function(){ PX.hideNav(); if(typeof endGuestSessionWithScreen==='function') endGuestSessionWithScreen(false); else if(typeof exitTutorial==='function') exitTutorial(); };
+
+  function beginLessons(){
+    PX.field.setPhase('water');
+    PX._swimDone=false; PX._setupDone=false; PX._gkTapped=false;
+    const l1=PX.buildLesson1Steps(), l2=PX.buildLesson2Steps();
+    PX._lessonStarts=[0, l1.length];   // Lesson 2 begins right after Lesson 1
+    const allSteps = wrapBannerReset([].concat(l1, l2));
+    if(typeof startTutorial==='function'){
+      startTutorial(allSteps, { onComplete:function(){ PX.hideNav(); if(typeof endGuestSessionWithScreen==='function') endGuestSessionWithScreen(true); else PX.flash('LESSON COMPLETE','good',2000); } });
+    }
+    PX.showNav();
+  }
+
   PX.start = async function(){
     try{
       if(typeof waitForStudioInitialization==='function') await waitForStudioInitialization();
       if(typeof waitForIntroAnimation==='function') await waitForIntroAnimation();
       injectBannerCss(); document.body.classList.add('pxParentMode');
       if(typeof prepareGuestInterface==='function') prepareGuestInterface();
-      PX.field.setPhase('water');   // start hidden so scene 1.1 reveals it
-      PX._swimDone=false; PX._setupDone=false; PX._gkTapped=false;
-      if(typeof startTutorial==='function'){
-        const allSteps = wrapBannerReset([].concat(PX.buildLesson1Steps(), PX.buildLesson2Steps()));
-        startTutorial(allSteps, { onComplete:function(){ if(typeof endGuestSessionWithScreen==='function') endGuestSessionWithScreen(true); else PX.flash('LESSON COMPLETE','good',2000); } });
-      }
+      PX.field.setPhase('water');           // keep the field hidden behind the start screen
+      PX.showStartScreen(beginLessons);     // stays until the parent clicks "Get started!"
     }catch(err){ console.error('Parent Experience failed to start:', err); }
   };
 
