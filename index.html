@@ -7230,7 +7230,7 @@ document.getElementById('guestReloadBtn')?.addEventListener('click', ()=>{
 // is a plain top-of-file `let` a person could technically flip in
 // devtools, but nothing in this codebase reads any parameter, storage
 // key, or UI control to change its value at runtime.
-if(GUEST_EXPERIENCE_MODE && !/[?&]experience=parent(?:&|=|$)/.test(location.search)) startGuestExperience();
+if(GUEST_EXPERIENCE_MODE && /[?&]experience=coach(?:&|=|$)/.test(location.search)) startGuestExperience();
 
 document.getElementById('shotClockToggleBtn')?.addEventListener('click', ()=>{
   const panel=document.getElementById('shotClockPanel');
@@ -10810,8 +10810,10 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   }
 
   // Auto-launch only when explicitly requested, so the default build is untouched.
+  // Dedicated Parent Experience file: launch Lesson 1 BY DEFAULT. The coach
+  // tutorial is still reachable in this same file via ?experience=coach.
   const params = (function(){ try{ return new URLSearchParams(location.search); }catch(e){ return { get:()=>null }; } })();
-  if(params.get('experience')==='parent'){
+  if(params.get('experience')!=='coach'){
     if(document.readyState==='complete' || document.readyState==='interactive') PX.start();
     else window.addEventListener('DOMContentLoaded', PX.start);
     if(params.get('dev')==='1') window.addEventListener('DOMContentLoaded', addDevButton);
