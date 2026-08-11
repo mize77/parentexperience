@@ -10314,7 +10314,7 @@ document.getElementById('toolPanelBackdrop').addEventListener('click', ()=>{ clo
 document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels(); });
 </script>
 
-<!-- ===== XquiX Parent Experience (Water Polo 1x1) — Lesson 1 ===== -->
+<!-- ===== XquiX Parent Experience (Water Polo 1x1) — Lessons 1-2 ===== -->
 <script>
 /* ============================================================================
    XquiX Parent Experience — Water Polo 1x1   (Lesson 1, revised)
@@ -10782,9 +10782,155 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     steps.push(watch('UNDERSTAND — The field: two goals and playing areas. The teams: 6 field players + 1 goalkeeper. The start: a swim-off. The officials: 1 or 2 referees.',
       ()=>{ PX.tap.disarm(); PX.flash('LESSON 1 COMPLETE','good',1600); }));
 
-    // Every scene starts with the instruction box visible; a headline in the
-    // scene's own onEnter then hides it and it fades back 0.5s later.
+    return steps;
+  };
+
+  // Every scene starts with the instruction box visible; a headline in the
+  // scene's own onEnter then hides it and it fades back 0.5s later.
+  function wrapBannerReset(steps){
     steps.forEach(s=>{ const orig=s.onEnter; s.onEnter=function(){ const bn=document.getElementById('tutorialBanner'); if(bn) bn.style.opacity='1'; if(PX._bannerT) clearTimeout(PX._bannerT); if(typeof orig==='function') orig.call(this); }; });
+    return steps;
+  }
+
+  /* =====================================================================
+     LESSON 2 — HOW THE GAME WORKS  (continues from Lesson 1)
+     ===================================================================== */
+  // Fade the Field-Zone overlay out and switch it off.
+  PX.blendOutZones = function(){
+    const zsvg=document.getElementById('fieldZonesSvg');
+    if(zsvg){ zsvg.style.transition='opacity .9s ease'; zsvg.style.opacity='0'; }
+    setTimeout(()=>{ if(typeof selectFieldZoneSet==='function') selectFieldZoneSet('none'); if(zsvg) zsvg.style.opacity=''; }, 950);
+  };
+  function pulseGoal(side, color, ms){
+    const bd=boardEl(); if(!bd) return; const gx=side==='left'?BLUE_GOAL.x:WHITE_GOAL.x; color=color||'#ffd23f';
+    const w=(typeof meterPxX==='function')?meterPxX(2.2):26, h=(typeof meterPxY==='function')?meterPxY(3.8):64;
+    const dot=make('div','', 'position:absolute;z-index:150;transform:translate(-50%,-50%);border:3px solid '+color+';border-radius:7px;box-shadow:0 0 0 5px '+color+'33;opacity:0;transition:opacity .4s;pointer-events:none;');
+    dot.style.width=w+'px'; dot.style.height=h+'px'; const s=boardToScreen(gx,CY); dot.style.left=s.left; dot.style.top=s.top;
+    bd.appendChild(dot); requestAnimationFrame(()=>{ dot.style.opacity='1'; });
+    setTimeout(()=>{ dot.style.opacity='0'; setTimeout(()=>dot.remove(), 500); }, ms||1600);
+  }
+  function passBallTo(toEl, ms){
+    return new Promise(res=>{
+      if(!toEl || typeof ball==='undefined' || !ball){ res(); return; }
+      const from={x:+ball.dataset.x,y:+ball.dataset.y}, to={x:+toEl.dataset.x,y:+toEl.dataset.y};
+      if(typeof ballCarrier!=='undefined') ballCarrier=null;
+      tween((x,y)=>{ ball.dataset.x=x; ball.dataset.y=y; if(typeof placeBall==='function') placeBall(); }, from, to, ms||500, ()=>{ if(typeof moveBallTo==='function') moveBallTo(toEl,'right'); res(); });
+    });
+  }
+  async function passRoutine(){
+    const w=whiteFields(); if(!w.length) return;
+    const carrier=(typeof ballCarrier!=='undefined'&&ballCarrier&&ballCarrier.dataset.team==='white')?ballCarrier:w[0];
+    const others=w.filter(p=>p!==carrier);
+    const seq=[others[0], others[1], carrier].filter(Boolean);
+    for(const t of seq){ await passBallTo(t, 550); await delay(350); }
+  }
+  function currentWhiteShooter(){ return (typeof ballCarrier!=='undefined'&&ballCarrier&&ballCarrier.dataset.team==='white')?ballCarrier:whiteFields()[0]; }
+  // Put the shooter at a clear angle to the goal so a near corner is genuinely
+  // open past the centred keeper (teaches "aim where the keeper isn't").
+  function setShooter(){
+    const s=currentWhiteShooter();
+    if(s){ setPlayer(s, 6, 8.5, 'v', faceTo(6,8.5, BLUE_GOAL.x, BLUE_GOAL.y)); if(typeof moveBallTo==='function') moveBallTo(s,'right'); }
+    PX.flash('SHOOTING POSITION','',1400);
+  }
+  function beginParentShot(){
+    PX.shoot.begin({ side:'left', autoRestart:false, onResult:function(res){
+      if(res.result==='GOAL'){ PX._goalScored=true; }
+      else { PX.flash('Saved! Aim for an open corner and try again','',2000); setTimeout(beginParentShot, 2200); }
+    }});
+  }
+  function restartToBlue(){
+    PX.centerBall();
+    const b=blueFields().sort((p,q)=>Math.abs((+p.dataset.x)-MID_X)-Math.abs((+q.dataset.x)-MID_X))[0];
+    if(b && typeof moveBallTo==='function'){ if(typeof ballCarrier!=='undefined') ballCarrier=null; moveBallTo(b,'right'); }
+    PX.flash('BLUE POSSESSION','',1600);
+  }
+
+  PX.buildLesson2Steps = function(){
+    const steps=[];
+    let drivePlayer=null, driveStartX=null;
+
+    // 2.1 — blend the zones out, then show which goal White attacks
+    steps.push(watch('Now the game is live. White protects the far goal — and attacks the Blue goal.',
+      ()=>{ PX.blendOutZones(); setTimeout(()=>{ pulseGoal('right','#1565c0',1500); setTimeout(()=>pulseGoal('left','#e8362a',1600), 1600); }, 800); }));
+
+    // 2.2 YOU TRY — drive toward the attacking (left) goal
+    steps.push({
+      instruction:'Move a White player towards the goal they are attacking — the left (Blue) goal.',
+      bannerSide:'top', skipDimPhase:false,
+      highlight: ()=> { const c=currentWhiteShooter(); return c?('.player[data-label="'+c.dataset.label+'"]'):'.player[data-team="white"]'; },
+      onEnter:function(){ drivePlayer=currentWhiteShooter(); driveStartX=drivePlayer?+drivePlayer.dataset.x:null; },
+      validate:{ type:'custom', fn:function(){ if(!drivePlayer||driveStartX==null) return false; return (+drivePlayer.dataset.x) <= driveStartX-1.2; } }
+    });
+
+    // 2.3 Moving the ball — a few one-handed passes
+    steps.push({
+      instruction:'Players swim, pass and create space to build a chance. Field players play the ball with one hand.',
+      bannerSide:'top', skipDimPhase:true, highlight:null, skipSuccessMessage:true,
+      onEnter:function(){ PX._passDone=false; passRoutine().then(()=>{ PX._passDone=true; }); },
+      validate:{ type:'custom', fn:()=> PX._passDone===true }
+    });
+
+    // ---- LESSON 2A — PHYSICALITY ----
+    steps.push(watch('Water polo is a physical sport. Touching and body contact between players is allowed — so this on its own is not a foul.',
+      ()=>{ PX.flash('CONTACT — PLAY ON','',1600); }));
+    steps.push(watch('An important principle: a player who is holding the ball can be challenged much more physically.',
+      ()=>{ PX.flash('BALL CARRIER — STRONG CONTACT ALLOWED','',1800); }));
+    steps.push(watch('But holding, sinking or pulling back a player who is NOT holding the ball is generally an exclusion foul. The key question is: does the player have the ball?',
+      ()=>{ setTimeout(()=>{ if(typeof PX.whistle==='function') PX.whistle(); }, 500); }));
+
+    // 2A.4 YOU TRY — ball or no ball?
+    steps.push({
+      instruction:'The ball is right next to this attacker — but is the player actually in possession of it?',
+      bannerSide:'top', skipDimPhase:true, highlight:null,
+      onEnter:function(){ PX._bnbDone=false;
+        PX.choice.ask({ options:[{label:'YES',value:'yes'},{label:'NO',value:'no'}], correct:'no',
+          onAnswer:function(v,ok){ if(ok){ PX._bnbDone=true; PX.choice.clear(); PX.flash('Correct — being close is not the same as holding','good',1900); } } });
+      },
+      validate:{ type:'custom', fn:()=> PX._bnbDone===true }
+    });
+
+    steps.push(watch('Water polo is physical — but unnecessarily rough or illegal play can be punished with an exclusion, or more.',
+      ()=>{ setTimeout(()=>{ if(typeof PX.whistle==='function') PX.whistle(); }, 400); PX.flash('EXCLUSION','',1500); }));
+
+    // ---- BACK TO LESSON 2 — SCORING ----
+    steps.push(watch('The attacking team creates enough space for an open shot.',
+      ()=>{ setShooter(); }));
+
+    // 2.5 / 2.6 — SHOOT (live). Retry until a goal so the story continues.
+    steps.push({
+      instruction:'Choose where to shoot: tap inside the goal to set your target, then press SHOOT.',
+      bannerSide:'top', skipDimPhase:true, highlight:null,
+      onEnter:function(){ PX._goalScored=false; beginParentShot(); },
+      validate:{ type:'custom', fn:()=> PX._goalScored===true }
+    });
+
+    // 2.7 What is a goal
+    steps.push(watch('A goal is scored when the whole ball crosses the goal line, between the posts and under the crossbar.',
+      ()=>{ PX.flash('GOAL!','goal',1600); }));
+
+    // 2.8 After the goal — restart at centre, Blue possession
+    steps.push(watch('After every goal the game restarts in the centre, and the team that conceded gets the ball. Blue now has possession.',
+      ()=>{ restartToBlue(); }));
+
+    // 2.9 YOU TRY — which goal is Blue attacking?
+    steps.push({
+      instruction:'Blue now has the ball. Tap the goal that Blue is attacking.',
+      bannerSide:'top', skipDimPhase:true, highlight:null,
+      onEnter:function(){ PX._goalTapped=false; pulseGoal('right','#1565c0',3200);
+        PX.tap.arm({ test:function(hit){ return !!(hit.board && hit.board.x>=23); },
+          onCorrect:function(){ PX._goalTapped=true; PX.tap.disarm(); PX.flash('Correct — Blue attacks this way','good',1600); },
+          onWrong:function(hit){ if(hit.board && hit.board.x<=6) PX.flash('That’s the goal Blue defends — try the other end','',1500); } });
+      },
+      validate:{ type:'custom', fn:()=> PX._goalTapped===true }
+    });
+
+    // 2.10 The game clock
+    steps.push(watch('A water polo game is divided into four periods.',
+      ()=>{ PX.flash('FOUR PERIODS','',1800); }));
+
+    // 2.11 Follow the referees
+    steps.push(watch('The referees move with the play — one focuses on the action near the goal, the other on the perimeter and developing play.',
+      ()=>{ PX.showReferees(); }));
 
     return steps;
   };
@@ -10841,7 +10987,8 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       PX.field.setPhase('water');   // start hidden so scene 1.1 reveals it
       PX._swimDone=false; PX._setupDone=false; PX._gkTapped=false;
       if(typeof startTutorial==='function'){
-        startTutorial(PX.buildLesson1Steps(), { onComplete:function(){ if(typeof endGuestSessionWithScreen==='function') endGuestSessionWithScreen(true); else PX.flash('LESSON 1 COMPLETE','good',2000); } });
+        const allSteps = wrapBannerReset([].concat(PX.buildLesson1Steps(), PX.buildLesson2Steps()));
+        startTutorial(allSteps, { onComplete:function(){ if(typeof endGuestSessionWithScreen==='function') endGuestSessionWithScreen(true); else PX.flash('LESSON COMPLETE','good',2000); } });
       }
     }catch(err){ console.error('Parent Experience failed to start:', err); }
   };
