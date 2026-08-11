@@ -10388,28 +10388,33 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   function faceTo(fromX,fromY,toX,toY){ return (typeof faceRotationTo==='function') ? (faceRotationTo(fromX,fromY,toX,toY) ?? 0) : 0; }
 
   /* ------------------------------------------------------- big center label */
-  PX.flash = function(text, kind, ms){
-    let l = document.getElementById('pxFlash');
+  // Headlines are QUEUED: each blends in and holds a full ~2s before the next,
+  // so a headline is never cut short by the one that follows it.
+  PX._flashQueue = [];
+  PX.flash = function(text, kind){
+    PX._flashQueue.push({ text:text, kind:kind });
+    if(!PX._flashBusy) _processFlash();
+  };
+  function _processFlash(){
+    if(!PX._flashQueue.length){ PX._flashBusy=false; const bn=document.getElementById('tutorialBanner'); if(bn){ clearTimeout(PX._bannerT); PX._bannerT=setTimeout(()=>{ bn.style.opacity='1'; }, 500); } return; }
+    PX._flashBusy=true;
+    const item=PX._flashQueue.shift();
+    let l=document.getElementById('pxFlash');
     if(!l){
-      l = make('div','', 'position:fixed;left:50%;top:16%;transform:translate(-50%,-50%);z-index:9600;'
-        + 'font:800 clamp(20px,5vw,46px)/1 system-ui,sans-serif;letter-spacing:.04em;padding:.35em .7em;'
+      l=make('div','', 'position:fixed;left:50%;top:16%;transform:translate(-50%,-50%);z-index:9600;'
+        + 'font:800 clamp(20px,5vw,46px)/1.12 system-ui,sans-serif;letter-spacing:.04em;padding:.35em .7em;'
         + 'border-radius:14px;color:#fff;background:rgba(11,26,51,.92);box-shadow:0 10px 40px rgba(0,0,0,.35);'
-        + 'pointer-events:none;opacity:0;transition:opacity .18s ease;text-align:center;white-space:pre-line;max-width:90vw;');
+        + 'pointer-events:none;opacity:0;transition:opacity .22s ease;text-align:center;white-space:pre-line;max-width:90vw;');
       l.id='pxFlash'; document.body.appendChild(l);
     }
-    const bg = kind==='goal' ? 'rgba(21,101,192,.95)' : kind==='save' ? 'rgba(122,92,0,.95)'
-             : kind==='whistle' ? 'rgba(20,35,92,.95)' : kind==='good' ? 'rgba(23,138,74,.95)'
+    const bg = item.kind==='goal' ? 'rgba(21,101,192,.95)' : item.kind==='save' ? 'rgba(122,92,0,.95)'
+             : item.kind==='whistle' ? 'rgba(20,35,92,.95)' : item.kind==='good' ? 'rgba(23,138,74,.95)'
              : 'rgba(11,26,51,.92)';
-    l.style.background = bg; l.textContent = text;
-    // Headline covers the top-center instruction box, so hide the box while
-    // it is up and fade it back in half a second after the headline clears.
-    const banner=document.getElementById('tutorialBanner'); if(banner) banner.style.opacity='0';
+    l.style.background=bg; l.textContent=item.text;
+    const banner=document.getElementById('tutorialBanner'); if(banner){ clearTimeout(PX._bannerT); banner.style.opacity='0'; }
     requestAnimationFrame(()=>{ l.style.opacity='1'; });
-    const dur = 2000;   // every headline blends in and holds for ~2s
-    clearTimeout(PX._flashT); clearTimeout(PX._bannerT);
-    PX._flashT = setTimeout(()=>{ l.style.opacity='0'; }, dur);
-    PX._bannerT = setTimeout(()=>{ const bn=document.getElementById('tutorialBanner'); if(bn) bn.style.opacity='1'; }, dur+500);
-  };
+    setTimeout(()=>{ l.style.opacity='0'; setTimeout(_processFlash, 320); }, 2000);   // full 2s hold
+  }
   PX.whistle = function(){
     try{ const AC=window.AudioContext||window.webkitAudioContext;
       if(AC){ const ac=PX._ac||(PX._ac=new AC()); const o=ac.createOscillator(), g=ac.createGain();
@@ -10447,7 +10452,8 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       const showLines   = phase==='lines';
       if(e.water){ e.water.style.transition='stroke .5s ease'; e.water.style.stroke = showOutline ? '#ffffff' : 'transparent'; e.water.style.opacity='1'; }
       op(e.goals, showOutline?'1':'0'); op(e.goalHatch, showOutline?'1':'0'); op(e.frames, showOutline?'1':'0');
-      op(e.lines, showLines?'1':'0'); op(e.bands, showLines?'1':'0'); op(e.brand, showLines?'1':'0');
+      op(e.lines, showLines?'1':'0'); op(e.bands, showLines?'1':'0');
+      op(e.brand, '1');   // deck words (RESPECT / FAIR PLAY / …) are always visible, even on the empty pool
     }
     return { setPhase, els };
   })();
@@ -10576,14 +10582,19 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
      GLOBAL SHOOT MECHANIC  (unchanged core)
      ===================================================================== */
   PX.shoot = (function(){
-    let active=false, side='left', target=null, onResultCb=null, autoRestart=false, zone=null, marker=null, btn=null, cornerScore=false;
+    let active=false, side='left', target=null, onResultCb=null, autoRestart=false, zone=null, marker=null, btn=null, cornerScore=false, forceSave=false, stopOnLine=false, saveBounce=false, ghostEl=null;
     function mouthRectPx(){ const gx=GEO.goalLineX(side); const inX=gx===2?gx+6:gx-6;   // generous, easy-to-tap aim area
       const a=boardToScreen(Math.min(gx,inX), GEO.CFG.mouthY0-2.5), b=boardToScreen(Math.max(gx,inX), GEO.CFG.mouthY1+2.5);
       return { left:a.left, top:a.top, right:b.left, bottom:b.top }; }
     function placeZone(){ if(!zone) return; const r=mouthRectPx(); zone.style.left=r.left; zone.style.top=r.top; zone.style.width='calc('+r.right+' - '+r.left+')'; zone.style.height='calc('+r.bottom+' - '+r.top+')'; }
     function placeMarker(){ if(!marker||!target) return; const s=boardToScreen(target.x,target.y); marker.style.left=s.left; marker.style.top=s.top; marker.style.display='block'; }
-    function begin(opts){ opts=opts||{}; side=opts.side||'left'; onResultCb=opts.onResult||null; autoRestart=!!opts.autoRestart; cornerScore=!!opts.cornerScore; target=null; active=true;
+    function begin(opts){ opts=opts||{}; side=opts.side||'left'; onResultCb=opts.onResult||null; autoRestart=!!opts.autoRestart; cornerScore=!!opts.cornerScore; forceSave=!!opts.forceSave; stopOnLine=!!opts.stopOnLine; saveBounce=!!opts.saveBounce; target=null; active=true;
       const bd=boardEl();
+      // Optional ghost showing WHERE to tap on the goal line.
+      if(ghostEl){ ghostEl.remove(); ghostEl=null; }
+      if(opts.ghost){ ghostEl=make('div','pxShootGhost','position:absolute;z-index:125;width:24px;height:24px;transform:translate(-50%,-50%);pointer-events:none;'); ghostEl.id='pxShootGhost';
+        ghostEl.innerHTML='<svg viewBox="0 0 24 24" width="24" height="24"><circle cx="12" cy="12" r="10" fill="rgba(255,210,63,.25)" stroke="#ffd23f" stroke-width="2" stroke-dasharray="3 3"/></svg>';
+        const gs=boardToScreen(opts.ghost.x, opts.ghost.y); ghostEl.style.left=gs.left; ghostEl.style.top=gs.top; bd.appendChild(ghostEl); }
       const zoneStyle = opts.subtleZone
         ? 'position:absolute;z-index:120;border:none;background:transparent;cursor:crosshair;touch-action:none;pointer-events:auto;'
         : 'position:absolute;z-index:120;border:2px dashed rgba(21,101,192,.85);border-radius:8px;background:rgba(21,101,192,.10);cursor:crosshair;touch-action:none;pointer-events:auto;';
@@ -10605,14 +10616,23 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       tween((x,y)=>{ if(typeof ball!=='undefined'&&ball){ ball.dataset.x=x; ball.dataset.y=y; if(typeof placeBall==='function') placeBall(); } }, from, target, 520, ()=>{
         const keeper=keeperEl?{x:+keeperEl.dataset.x,y:+keeperEl.dataset.y}:null;
         let res;
-        if(cornerScore){ const scored=(target.y <= GEO.CFG.mouthY0+0.3) || (target.y >= GEO.CFG.mouthY1-0.3); res={ result: scored?'GOAL':'SAVE' }; }
+        if(forceSave) res={ result:'SAVE' };
+        else if(cornerScore){ const scored=(target.y <= GEO.CFG.mouthY0+0.3) || (target.y >= GEO.CFG.mouthY1-0.3); res={ result: scored?'GOAL':'SAVE' }; }
         else res=GEO.shotResult(from,target,keeper);
         finish(res, keeperEl); }); }
-    function finish(res, keeperEl){ cleanup();
-      if(res.result==='SAVE' && keeperEl){ if(typeof moveBallTo==='function') moveBallTo(keeperEl); PX.flash('SAVE','save',1500); }
-      else { const gx=GEO.goalLineX(side), inNet=side==='left'?gx-0.7:gx+0.7; if(typeof ball!=='undefined'&&ball){ ball.dataset.x=inNet; ball.dataset.y=target.y; if(typeof placeBall==='function') placeBall(); } PX.flash('GOAL','goal',1600); if(autoRestart) setTimeout(()=>PX.restartAtCenter(),1300); }
+    function finish(res, keeperEl){ const gx=GEO.goalLineX(side); cleanup();
+      if(res.result==='SAVE'){
+        if(saveBounce){ // ball rebounds to the front so it stays selectable (never parked on the keeper)
+          if(typeof ball!=='undefined'&&ball){ ball.dataset.x=(side==='left'?gx+3:gx-3); ball.dataset.y=CY; if(typeof placeBall==='function') placeBall(); }
+        } else if(keeperEl && typeof moveBallTo==='function'){ moveBallTo(keeperEl); }
+        PX.flash('SAVE','save');
+      } else {
+        const settleX = stopOnLine ? gx : (side==='left'?gx-0.7:gx+0.7);   // stop on the line, or deep in the net
+        if(typeof ball!=='undefined'&&ball){ ball.dataset.x=settleX; ball.dataset.y=target.y; if(typeof placeBall==='function') placeBall(); }
+        PX.flash('GOAL','goal'); if(autoRestart) setTimeout(()=>PX.restartAtCenter(),1300);
+      }
       if(onResultCb) onResultCb(res); }
-    function cleanup(){ if(PX._shootResize){ window.removeEventListener('resize',PX._shootResize); PX._shootResize=null; } if(zone){ zone.remove(); zone=null; } if(marker){ marker.remove(); marker=null; } if(btn){ btn.remove(); btn=null; } }
+    function cleanup(){ if(PX._shootResize){ window.removeEventListener('resize',PX._shootResize); PX._shootResize=null; } if(zone){ zone.remove(); zone=null; } if(marker){ marker.remove(); marker=null; } if(btn){ btn.remove(); btn=null; } if(ghostEl){ ghostEl.remove(); ghostEl=null; } }
     return { begin, cancel(){ active=false; cleanup(); }, get active(){ return active; } };
   })();
   PX.restartAtCenter = function(){ PX.centerBall(); PX.flash('RESTART','',1000); };
@@ -10778,19 +10798,19 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     steps.push(watch('Each period starts with the teams at opposite ends of the pool, and the ball in the center. In pools without a centre ball ring, the referee tosses the ball in from one side instead.',
       ()=>{ PX.clearRefIntro(); PX.centerBall(); }));
 
-    // 1.9a YOU TRY — swim-off: tap and DRAG the White center player to the ghost by the ball
-    steps.push({
-      instruction:'The swim-off! Tap and drag the highlighted White player towards the ball in the center of the pool (onto the ghost).',
-      bannerSide:'top', skipDimPhase:false,
+    // 1.9a YOU TRY — swim-off: tap & drag the White center player up to the 5m line
+    const step19a = {
+      instruction:'The swim-off! Tap and drag the highlighted White player forward onto the ghost at the 5-metre line.',
+      bannerSide:'top', skipDimPhase:true, highlight:null,   // no engine ring — one spotlight circle only
       onEnter:function(){ PX.whistle();
         const w=whiteCenter();
-        if(w){ const tx=MID_X+0.6, ty=CY;
-          this.ghost={ type:'playerPosition', targetPlayer:{ team:w.dataset.team, pose:w.dataset.pose, rot:+w.dataset.rot||0, x:tx, y:ty, label:w.dataset.label } };
-          spotlightCircle(tx, ty, 3.0); }
+        if(w){ const tx=22, ty=CY;   // the 5m line on White's side (x=22)
+          step19a.ghost={ type:'playerPosition', targetPlayer:{ team:w.dataset.team, pose:w.dataset.pose, rot:+w.dataset.rot||0, x:tx, y:ty, label:w.dataset.label } };
+          spotlightBetween(+w.dataset.x, +w.dataset.y, tx, ty, true); }   // ONE circle around player + ghost
       },
-      highlight: ()=> '.player[data-team="white"][data-label="W6"]',
-      validate:{ type:'custom', fn:function(){ const w=whiteCenter(); if(!w) return false; const b=ballObj(); return Math.hypot((+w.dataset.x)-b.x,(+w.dataset.y)-b.y) <= 8; } }
-    });
+      validate:{ type:'custom', fn:function(){ const w=whiteCenter(); if(!w) return false; return (+w.dataset.x) <= 22.6; } }   // reached the 5m line
+    };
+    steps.push(step19a);
 
     // 1.9b Swim-off completes -> everyone follows, White wins the ball, back-pass (needs Got it)
     steps.push(animatedWatch('The race for possession at the start of a period is called the swim-off.',
@@ -10913,12 +10933,21 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     PX.flash('SHOOTING POSITION','');
   }
   function setShootingAngle(on){ try{ if(typeof shootingAngleActive!=='undefined'){ shootingAngleActive=!!on; if(typeof renderShootingAngle==='function') renderShootingAngle(); if(typeof _shootingAngleUI!=='undefined'&&_shootingAngleUI&&_shootingAngleUI.render) _shootingAngleUI.render(); } }catch(e){} }
-  function beginParentShot(){
-    setShootingAngle(true);   // show the attacker's shooting angle instead of a box
-    PX.shoot.begin({ side:'left', autoRestart:false, cornerScore:true, subtleZone:true, onResult:function(res){
-      if(res.result==='GOAL'){ PX._goalScored=true; setShootingAngle(false); }
-      else { PX.flash('The goalie blocked it — aim just inside a post and try again',''); setTimeout(beginParentShot, 2000); }
-    }});
+  function beginParentShot(){ setShootingAngle(true); s25Attempt(0); }   // show the attacker's shooting angle
+  function s25Attempt(n){
+    if(n===0){
+      // First attempt: a ghost in the CENTER of the goal — the goalie blocks it.
+      PX.shoot.begin({ side:'left', subtleZone:true, forceSave:true, saveBounce:true, ghost:{x:BLUE_GOAL.x, y:CY}, onResult:function(){
+        PX.flash('The goalie blocked the center —\nnow aim just inside a post'); setTimeout(()=>s25Attempt(1), 2400);
+      }});
+    } else {
+      // Retry: a ghost close to a post — a shot within 0.3m of a post scores and
+      // the ball stops ON the goal line (so the next step continues from there).
+      PX.shoot.begin({ side:'left', subtleZone:true, cornerScore:true, stopOnLine:true, ghost:{x:BLUE_GOAL.x, y:13.2}, onResult:function(res){
+        if(res.result==='GOAL'){ PX._goalScored=true; setShootingAngle(false); }
+        else { PX.flash('Almost — aim right next to the post and try again'); setTimeout(()=>s25Attempt(1), 2200); }
+      }});
+    }
   }
   function restartToBlue(){
     const whites=whiteFields(), blues=blueFields();
@@ -11005,6 +11034,11 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       bd.appendChild(circ); requestAnimationFrame(()=>{ circ.style.opacity='1'; });
     }, 2000);
   }
+  // ONE circle enclosing both a player and its ghost target (never two circles).
+  function spotlightBetween(ax,ay,bx,by,withArrow){
+    const cx=(ax+bx)/2, cy=(ay+by)/2, half=Math.hypot(bx-ax,by-ay)/2;
+    spotlightCircle(cx, cy, half+1.7, withArrow);
+  }
   function holdZone5Demo(){
     clearHoldCinematic();
     const z5=zoneCentroid('z5');
@@ -11077,17 +11111,17 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     // 2.2 YOU TRY — under pressure, protect the ball: tap & drag back to the ghost
     const step22 = {
       instruction:'Under pressure from the defender, the attacker protects the ball by easing back. Tap and drag the White player back onto the ghosted spot.',
-      bannerSide:'top', skipDimPhase:false,
-      highlight: ()=> { const c=currentWhiteShooter(); return c?('.player[data-label="'+c.dataset.label+'"]'):'.player[data-team="white"]'; },
+      bannerSide:'top', skipDimPhase:true, highlight:null,   // no engine ring — one spotlight circle only
       onEnter:function(){
         drivePlayer=currentWhiteShooter();
         if(drivePlayer){
           const def=nearestBlue(drivePlayer);
           if(def) startFollow(drivePlayer, def);   // defender shadows, keeping the same distance
-          const tx=(+drivePlayer.dataset.x)+2.2, ty=+drivePlayer.dataset.y;   // back = away from the left goal
+          const sx=+drivePlayer.dataset.x, sy=+drivePlayer.dataset.y;
+          const tx=sx+2.2, ty=sy;   // back = away from the left goal
           driveTarget={x:tx,y:ty};
           step22.ghost={ type:'playerPosition', targetPlayer:{ team:drivePlayer.dataset.team, pose:drivePlayer.dataset.pose, rot:+drivePlayer.dataset.rot||0, x:tx, y:ty, label:drivePlayer.dataset.label } };
-          spotlightCircle(tx, ty, 3.0, true);   // spotlight then red circle + arrow around the action
+          spotlightBetween(sx, sy, tx, ty, true);   // ONE circle around player + ghost
         }
       },
       validate:{ type:'custom', fn:function(){ if(!drivePlayer||!driveTarget) return false; return Math.hypot((+drivePlayer.dataset.x)-driveTarget.x,(+drivePlayer.dataset.y)-driveTarget.y) <= 0.8; } }
@@ -11096,8 +11130,8 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
 
     // 2.3 Passing FIRST (each receiver holds 1s, easing slightly back), THEN
     // everyone moves forward into their original positions. (needs Got it)
-    steps.push(animatedWatch('Good — now the ball is passed around. Each player holds it for a moment, easing back, before passing on. Afterwards they move forward into position.',
-      function(){ clearHoldCinematic(); return passRoutine().then(()=>returnFromBackup()); }));
+    steps.push(animatedWatch('Good — the ball is passed around. A player in possession keeps their body between the ball and the defender to protect it.',
+      function(){ clearHoldCinematic(); return passRoutine(); }));
 
     // ---- LESSON 2A — PHYSICALITY ----
     // 2A.1 contact is allowed
@@ -11148,8 +11182,9 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       instruction:'A goal counts only when the WHOLE ball crosses the goal line, between the posts and under the crossbar. Tap and drag the ball across the line into the net.',
       bannerSide:'top', skipDimPhase:true, highlight:null,
       onEnter:function(){ PX._goalDragged=false; setShootingAngle(false);
-        if(typeof ball!=='undefined'&&ball){ if(typeof ballCarrier!=='undefined') ballCarrier=null; ball.dataset.x=2.5; ball.dataset.y=12; if(typeof placeBall==='function') placeBall(); }
-        spotlightCircle(2, 12, 3.0, true);
+        if(typeof ballCarrier!=='undefined') ballCarrier=null;   // keep the ball where the shot left it — on the line
+        const by=(typeof ball!=='undefined'&&ball)?+ball.dataset.y:CY;
+        spotlightCircle(BLUE_GOAL.x, by, 3.0, true);
         armBallDrag('left', function(){ PX._goalDragged=true; clearHoldCinematic(); PX.flash('GOAL!','goal'); });
       },
       validate:{ type:'custom', fn:()=> PX._goalDragged===true }
