@@ -10505,6 +10505,13 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   // Cinematic referee intro: spotlight each referee (2s), then a red circle
   // with an arrow pointing at each (3s). Auto-advances — no tap needed.
   function svgLayer(z){ const s=document.createElementNS('http://www.w3.org/2000/svg','svg'); s.setAttribute('viewBox','0 0 29 24'); s.setAttribute('preserveAspectRatio','none'); s.style.cssText='position:absolute;inset:0;width:100%;height:100%;z-index:'+(z||200)+';pointer-events:none;opacity:0;transition:opacity .5s ease;'; return s; }
+  // Front Court view rotates/crops the field SVGs (see setFieldRotation). Our own
+  // board-coordinate SVG overlays must adopt the SAME viewBox + rotation so their
+  // circles/masks land on the same spots as the players. In full court these are
+  // no-ops ('0 0 29 24', no transform).
+  function fcViewBox(){ return (typeof frontCourtActive!=='undefined' && frontCourtActive) ? (M.fieldY+' '+FC_FULL_MIN_Y+' '+M.fieldH+' '+FC_FULL_HEIGHT) : '0 0 29 24'; }
+  function fcWrap(inner){ if(typeof frontCourtActive!=='undefined' && frontCourtActive){ return '<g transform="rotate(-90, '+(FC_CROPX1/2)+', '+(FC_CROPX1/2)+')">'+inner+'</g>'; } return inner; }
+  function fcSvgLayer(z){ const s=svgLayer(z); s.setAttribute('viewBox', fcViewBox()); return s; }
   function svgArrow(x1,y1,x2,y2,color){ const ang=Math.atan2(y2-y1,x2-x1), ah=0.7, a1=ang+Math.PI*0.83, a2=ang-Math.PI*0.83;
     return '<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="'+color+'" stroke-width="0.16" stroke-linecap="round"/>'
       + '<polygon points="'+x2+','+y2+' '+(x2+ah*Math.cos(a1))+','+(y2+ah*Math.sin(a1))+' '+(x2+ah*Math.cos(a2))+','+(y2+ah*Math.sin(a2))+'" fill="'+color+'"/>'; }
@@ -10755,6 +10762,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
 
     await Promise.all(anims);
     if(carrier && typeof moveBallTo==='function') moveBallTo(carrier, 'right');   // ball rests with zone-4 attacker
+    PX.enterFrontCourt();   // teams are set up in the zones -> zoom to the attacking half
   };
 
   /* =====================================================================
@@ -10811,10 +10819,10 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
 
     // 1.9a YOU TRY — swim-off: tap & drag the White center player up to the 5m line
     const step19a = {
-      instruction:'The swim-off! Tap and drag the highlighted White player forward onto the ghost at the 5-metre line.',
+      instruction:'The swim-off! Drag the highlighted White player forward onto the ghost at the 5-metre line — or move it with the direction pad.',
       bannerSide:'top', skipDimPhase:true, highlight:null,   // no engine ring — one spotlight circle only
-      // exempt ONLY the draggable White player from the interaction lock (no engine ring drawn)
-      allowedSelectors: function(){ const w=whiteCenter(); return w ? ('.player[data-label="'+w.dataset.label+'"]') : null; },
+      // exempt the draggable White player AND the direction pad from the interaction lock (drag OR D-pad move)
+      allowedSelectors: function(){ const w=whiteCenter(); return w ? ['.player[data-label="'+w.dataset.label+'"]', '#directionPad'] : ['#directionPad']; },
       onEnter:function(){ PX.whistle();
         const w=whiteCenter();
         if(w){ PX.clearSelections(); if(typeof setSelected==='function') setSelected(w, true);   // selected => single-finger touch MOVES it (unselected would spin)
@@ -10876,6 +10884,21 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     if(zsvg){ zsvg.style.transition='opacity .9s ease'; zsvg.style.opacity='0'; }
     setTimeout(()=>{ if(typeof selectFieldZoneSet==='function') selectFieldZoneSet('none'); if(zsvg) zsvg.style.opacity=''; }, 950);
   };
+  // Switch the app to Front Court view (crops/zooms to the attacking half) —
+  // used once the teams are set up so the offense fills the phone screen.
+  PX.enterFrontCourt = function(){ try{
+    if(typeof toggleFrontCourt==='function' && typeof frontCourtActive!=='undefined' && !frontCourtActive){
+      if(typeof frontCourtZoomed!=='undefined') frontCourtZoomed=false;
+      toggleFrontCourt(true);
+      if(typeof setFrontCourtDepth==='function' && typeof FC_DEFAULT_DEPTH!=='undefined') setFrontCourtDepth(FC_DEFAULT_DEPTH);
+      if(typeof updateViewOptionCards==='function') updateViewOptionCards();
+    } }catch(e){} };
+  PX.exitFrontCourt = function(){ try{
+    if(typeof toggleFrontCourt==='function' && typeof frontCourtActive!=='undefined' && frontCourtActive){
+      if(typeof frontCourtZoomed!=='undefined') frontCourtZoomed=false;
+      toggleFrontCourt(false);
+      if(typeof updateViewOptionCards==='function') updateViewOptionCards();
+    } }catch(e){} };
   function pulseGoal(side, color, ms){
     const bd=boardEl(); if(!bd) return; const gx=side==='left'?BLUE_GOAL.x:WHITE_GOAL.x; color=color||'#ffd23f';
     const w=(typeof meterPxX==='function')?meterPxX(2.2):26, h=(typeof meterPxY==='function')?meterPxY(3.8):64;
@@ -10992,6 +11015,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   function restartToBlue(){
     setShootingAngle(false);   // never carry the shooting-angle lines into the kick-off (they'd redraw for the new carrier)
     clearHoldCinematic();      // drop any lingering spotlight/ring
+    PX.exitFrontCourt();       // the kick-off is at the center of the pool -> show the full court again
     // clear any raised block-arm indicators from the shooting scene
     qa('.player').forEach(pl=>{ if(pl.dataset.blockArm && pl.dataset.blockArm!=='none'){ pl.dataset.blockArm='none'; if(typeof updatePlayerVisual==='function') updatePlayerVisual(pl); } });
     const whites=whiteFields(), blues=blueFields();
@@ -11067,18 +11091,18 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   function clearHoldCinematic(){ ['pxHoldSpot','pxHoldCircle'].forEach(id=>{ const e=document.getElementById(id); if(e) e.remove(); }); if(PX._holdT) clearTimeout(PX._holdT); }
   function spotlightCircle(cx, cy, r, withArrow){
     clearHoldCinematic(); const bd=boardEl(); if(!bd) return;
-    const spot=svgLayer(200); spot.id='pxHoldSpot';
+    const spot=fcSvgLayer(200); spot.id='pxHoldSpot';
     spot.innerHTML='<defs><mask id="pxHoldMask"><rect x="0" y="0" width="29" height="24" fill="white"/><circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="black"/></mask></defs>'
-      + '<rect x="0" y="0" width="29" height="24" fill="rgba(4,10,25,0.62)" mask="url(#pxHoldMask)"/>'
-      + '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="#ffe14d" stroke-width="0.14"/>';
+      + fcWrap('<rect x="0" y="0" width="29" height="24" fill="rgba(4,10,25,0.62)" mask="url(#pxHoldMask)"/>'
+      + '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="#ffe14d" stroke-width="0.14"/>');
     bd.appendChild(spot); requestAnimationFrame(()=>{ spot.style.opacity='1'; });
     PX._holdT=setTimeout(()=>{
       spot.style.opacity='0'; setTimeout(()=>spot.remove(), 500);
-      const circ=svgLayer(201); circ.id='pxHoldCircle';
+      const circ=fcSvgLayer(201); circ.id='pxHoldCircle';
       let arrow='';
       if(withArrow){ const dx=MID_X-cx, dy=CY-cy, dl=Math.hypot(dx,dy)||1, ux=dx/dl, uy=dy/dl;
         arrow=svgArrow(cx+ux*(r+3), cy+uy*(r+3), cx+ux*(r+0.4), cy+uy*(r+0.4), '#e8362a'); }
-      circ.innerHTML='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="#e8362a" stroke-width="0.2"/>' + arrow;
+      circ.innerHTML=fcWrap('<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="#e8362a" stroke-width="0.2"/>' + arrow);
       bd.appendChild(circ); requestAnimationFrame(()=>{ circ.style.opacity='1'; });
     }, 2000);
   }
@@ -11087,10 +11111,10 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   // area while they act (e.g. dragging the ball over the line). No 2s fade.
   function persistSpotlight(cx, cy, r){
     clearHoldCinematic(); const bd=boardEl(); if(!bd) return;
-    const spot=svgLayer(200); spot.id='pxHoldSpot';
+    const spot=fcSvgLayer(200); spot.id='pxHoldSpot';
     spot.innerHTML='<defs><mask id="pxHoldMask"><rect x="0" y="0" width="29" height="24" fill="white"/><circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="black"/></mask></defs>'
-      + '<rect x="0" y="0" width="29" height="24" fill="rgba(4,10,25,0.62)" mask="url(#pxHoldMask)"/>'
-      + '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="#ffe14d" stroke-width="0.16"/>';
+      + fcWrap('<rect x="0" y="0" width="29" height="24" fill="rgba(4,10,25,0.62)" mask="url(#pxHoldMask)"/>'
+      + '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="#ffe14d" stroke-width="0.16"/>');
     bd.appendChild(spot); requestAnimationFrame(()=>{ spot.style.opacity='1'; });
   }
   // ONE circle enclosing both a player and its ghost target (never two circles).
@@ -11202,14 +11226,14 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
 
     // 2.1 — blend the zones out, then show which goal White attacks
     steps.push(watch('Now the game is live. White protects the far goal — and attacks the Blue goal.',
-      ()=>{ PX.field.setPhase('lines'); PX.ensureOffenseBoard(); PX.blendOutZones(); setTimeout(()=>{ pulseGoal('right','#1565c0',1500); setTimeout(()=>pulseGoal('left','#e8362a',1600), 1600); }, 800); }));
+      ()=>{ PX.field.setPhase('lines'); PX.ensureOffenseBoard(); PX.blendOutZones(); PX.enterFrontCourt(); setTimeout(()=>{ pulseGoal('right','#1565c0',1500); setTimeout(()=>pulseGoal('left','#e8362a',1600), 1600); }, 800); }));
 
     // 2.2 YOU TRY — under pressure, protect the ball: tap & drag back to the ghost
     const step22 = {
-      instruction:'Under pressure from the defender, the attacker protects the ball by easing back. Tap and drag the White player back onto the ghosted spot.',
+      instruction:'Under pressure from the defender, the attacker protects the ball by easing back. Drag the White player back onto the ghosted spot — or move it with the direction pad.',
       bannerSide:'top', skipDimPhase:true, highlight:null,   // no engine ring — one spotlight circle only
-      // exempt ONLY the draggable White player from the interaction lock (no engine ring drawn)
-      allowedSelectors: function(){ return drivePlayer ? ('.player[data-label="'+drivePlayer.dataset.label+'"]') : null; },
+      // exempt the draggable White player AND the direction pad from the interaction lock (drag OR D-pad move)
+      allowedSelectors: function(){ return drivePlayer ? ['.player[data-label="'+drivePlayer.dataset.label+'"]', '#directionPad'] : ['#directionPad']; },
       onEnter:function(){
         drivePlayer=currentWhiteShooter();
         if(drivePlayer){
@@ -11320,6 +11344,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
 
   /* --------------------------------------- swim-off choreography (promise) */
   async function runSwimOff(){
+    PX.clearSelections();   // drop the swim-off drag selection so the D-pad hides
     const b = { x:MID_X, y:CY };
     const wC = whiteCenter(), bC = blueCenter();
     const otherW = whiteFields().filter(p=>p!==wC);
@@ -11355,11 +11380,14 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     if(document.getElementById('pxBannerCss')) return;
     const s=document.createElement('style'); s.id='pxBannerCss';
     s.textContent = 'body.pxParentMode #tutorialBanner{ left:50% !important; top:12px !important; right:auto !important; bottom:auto !important; transform:translateX(-50%) !important; transition:opacity .5s ease !important; }'
+      // On touch/phone the banner sits in the TOP-LEFT corner so it never covers the action.
+      + ' body.pxParentMode.pxTouch #tutorialBanner{ left:8px !important; top:8px !important; right:auto !important; transform:none !important; max-width:min(64vw,340px) !important; }'
       + ' body.pxParentMode #tutorialExitBtn{ display:none !important; }'   // WP tutorial uses its own bottom-left nav, never the coach exit
       + ' body.pxParentMode .rotateHandle{ display:none !important; pointer-events:none !important; }'   // parents never rotate/spin players
-      + ' body.pxParentMode .player.selected{ outline:none !important; }'   // we select the draggable player only to make it MOVE (not spin) — keep it invisible
       + ' body.pxParentMode .fieldZoneLabelName{ display:none !important; }'   // field zones show NUMBERS only for parents
-      + ' body.pxParentMode #tutorialInstruction{ white-space:pre-line; }';   // allow line breaks / bullet lists in the instruction box
+      + ' body.pxParentMode #tutorialInstruction{ white-space:pre-line; }'   // allow line breaks / bullet lists in the instruction box
+      // Block/deactivate every app control that is not part of a tutorial step.
+      + ' body.pxParentMode #controlsPanel, body.pxParentMode #quickCommandBar, body.pxParentMode #edgeTabStack, body.pxParentMode #playerActionBar, body.pxParentMode #timelineCommandsBar, body.pxParentMode #presentationPlaybackBar, body.pxParentMode #ballOwnerStatus, body.pxParentMode #autosaveStatus, body.pxParentMode #shotClockLeft, body.pxParentMode #shotClockRight, body.pxParentMode #studioFrameDots, body.pxParentMode h1{ display:none !important; }';
     document.head.appendChild(s);
   }
 
@@ -11441,10 +11469,11 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     PX.clearActors(); PX.clearReferees();
     PX.showStartScreen(beginLessons);   // back to "Water Polo made easy" start screen
   };
-  PX.exitWp = function(){ PX.hideNav(); if(typeof tutorialModeActive!=='undefined' && tutorialModeActive && typeof exitTutorial==='function') exitTutorial(); PX.showWpEnd('exit'); };
+  PX.exitWp = function(){ PX.hideNav(); PX.exitFrontCourt(); if(typeof tutorialModeActive!=='undefined' && tutorialModeActive && typeof exitTutorial==='function') exitTutorial(); PX.showWpEnd('exit'); };
 
   function beginLessons(){
     document.body.classList.add('guestExperienceActive');   // lock-down CSS only (no coach exit wiring)
+    PX.exitFrontCourt();   // always start in full court (swim-off uses the whole pool)
     PX.field.setPhase('water');
     PX._swimDone=false; PX._setupDone=false; PX._gkTapped=false;
     const l1=PX.buildLesson1Steps(), l2=PX.buildLesson2Steps();
@@ -11461,6 +11490,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       if(typeof waitForStudioInitialization==='function') await waitForStudioInitialization();
       if(typeof waitForIntroAnimation==='function') await waitForIntroAnimation();
       injectBannerCss(); document.body.classList.add('pxParentMode');
+      if(typeof isTouchDevice==='function' && isTouchDevice()) document.body.classList.add('pxTouch');   // phone/tablet layout: banner top-left
       PX.field.setPhase('water');           // keep the field hidden behind the start screen
       PX.showStartScreen(beginLessons);     // stays until the parent clicks "Get started!"
     }catch(err){ console.error('Parent Experience failed to start:', err); }
