@@ -10401,8 +10401,14 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
              : kind==='whistle' ? 'rgba(20,35,92,.95)' : kind==='good' ? 'rgba(23,138,74,.95)'
              : 'rgba(11,26,51,.92)';
     l.style.background = bg; l.textContent = text;
+    // Headline covers the top-centre instruction box, so hide the box while
+    // it is up and fade it back in half a second after the headline clears.
+    const banner=document.getElementById('tutorialBanner'); if(banner) banner.style.opacity='0';
     requestAnimationFrame(()=>{ l.style.opacity='1'; });
-    clearTimeout(PX._flashT); PX._flashT = setTimeout(()=>{ l.style.opacity='0'; }, ms||1200);
+    const dur = ms||1200;
+    clearTimeout(PX._flashT); clearTimeout(PX._bannerT);
+    PX._flashT = setTimeout(()=>{ l.style.opacity='0'; }, dur);
+    PX._bannerT = setTimeout(()=>{ const bn=document.getElementById('tutorialBanner'); if(bn) bn.style.opacity='1'; }, dur+500);
   };
   PX.whistle = function(){
     try{ const AC=window.AudioContext||window.webkitAudioContext;
@@ -10493,28 +10499,33 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   function svgArrow(x1,y1,x2,y2,color){ const ang=Math.atan2(y2-y1,x2-x1), ah=0.7, a1=ang+Math.PI*0.83, a2=ang-Math.PI*0.83;
     return '<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="'+color+'" stroke-width="0.16" stroke-linecap="round"/>'
       + '<polygon points="'+x2+','+y2+' '+(x2+ah*Math.cos(a1))+','+(y2+ah*Math.sin(a1))+' '+(x2+ah*Math.cos(a2))+','+(y2+ah*Math.sin(a2))+'" fill="'+color+'"/>'; }
+  PX.clearRefIntro = function(){
+    ['pxRefSpot','pxRefArrows'].forEach(id=>{ const e=document.getElementById(id); if(e) e.remove(); });
+    if(PX._refT1) clearTimeout(PX._refT1); if(PX._refT2) clearTimeout(PX._refT2);
+  };
   PX.refereeIntro = function(){
     return new Promise(res=>{
+      PX.clearRefIntro();
       const refs = (PX._refPos && PX._refPos.length) ? PX._refPos : [{x:7,y:1.1},{x:22,y:22.9}];
       const bd=boardEl();
       // --- spotlight (2s) ---
-      const spot=svgLayer(200);
+      const spot=svgLayer(200); spot.id='pxRefSpot';
       spot.innerHTML='<defs><mask id="pxSpotMask"><rect x="0" y="0" width="29" height="24" fill="white"/>'
         + refs.map(r=>'<circle cx="'+r.x+'" cy="'+r.y+'" r="2.0" fill="black"/>').join('') + '</mask></defs>'
         + '<rect x="0" y="0" width="29" height="24" fill="rgba(4,10,25,0.62)" mask="url(#pxSpotMask)"/>'
         + refs.map(r=>'<circle cx="'+r.x+'" cy="'+r.y+'" r="2.0" fill="none" stroke="#ffe14d" stroke-width="0.16"/>').join('');
       bd.appendChild(spot); requestAnimationFrame(()=>{ spot.style.opacity='1'; });
-      setTimeout(()=>{
+      PX._refT1 = setTimeout(()=>{
         spot.style.opacity='0'; setTimeout(()=>spot.remove(), 500);
         // --- red circles + arrows (3s) ---
-        const arr=svgLayer(201);
+        const arr=svgLayer(201); arr.id='pxRefArrows';
         arr.innerHTML = refs.map(r=>{
           const dx=MID_X-r.x, dy=CY-r.y, dl=Math.hypot(dx,dy)||1, ux=dx/dl, uy=dy/dl;
           const tailx=r.x+ux*4.2, taily=r.y+uy*4.2, tipx=r.x+ux*2.1, tipy=r.y+uy*2.1;
           return '<circle cx="'+r.x+'" cy="'+r.y+'" r="1.7" fill="none" stroke="#e8362a" stroke-width="0.18"/>' + svgArrow(tailx,taily,tipx,tipy,'#e8362a');
         }).join('');
         bd.appendChild(arr); requestAnimationFrame(()=>{ arr.style.opacity='1'; });
-        setTimeout(()=>{ arr.style.opacity='0'; setTimeout(()=>{ arr.remove(); res(); }, 500); }, 3000);
+        PX._refT2 = setTimeout(()=>{ arr.style.opacity='0'; setTimeout(()=>{ arr.remove(); res(); }, 500); }, 3000);
       }, 2000);
     });
   };
@@ -10543,6 +10554,20 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       const from={ x:+elm.dataset.x, y:+elm.dataset.y };
       const carrier = (typeof ballCarrier!=='undefined' && ballCarrier===elm);
       tween((x,y)=>{ elm.dataset.x=x; elm.dataset.y=y; if(typeof place==='function') place(elm); if(carrier && typeof moveBallTo==='function') moveBallTo(elm, ballHand); }, from, to, ms||600, res);
+    });
+  }
+  // Swim HORIZONTAL with the head pointing along the travel direction, then
+  // settle into the final pose/rotation on arrival.
+  function swimSettle(elm, to, ms, finalRot, finalPose){
+    return new Promise(res=>{
+      if(!elm){ res(); return; }
+      const from={ x:+elm.dataset.x, y:+elm.dataset.y };
+      elm.dataset.pose='h'; elm.dataset.rot=faceTo(from.x,from.y,to.x,to.y);   // head toward the swim direction
+      const carrier=(typeof ballCarrier!=='undefined' && ballCarrier===elm);
+      tween((x,y)=>{ elm.dataset.x=x; elm.dataset.y=y; if(typeof place==='function') place(elm); if(carrier && typeof moveBallTo==='function') moveBallTo(elm,ballHand); }, from, to, ms||600, ()=>{
+        elm.dataset.pose = finalPose||'v'; if(finalRot!=null) elm.dataset.rot=finalRot; if(typeof place==='function') place(elm);
+        if(carrier && typeof moveBallTo==='function') moveBallTo(elm,ballHand); res();
+      });
     });
   }
   function delay(ms){ return new Promise(r=>setTimeout(r,ms)); }
@@ -10639,7 +10664,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     perimeterAssign.forEach(({zone,w})=>{
       const c=zoneCentroid(zone);
       const wr=faceTo(c.x,c.y, BLUE_GOAL.x,BLUE_GOAL.y);              // attacker faces the goal
-      anims.push(swim(w, c, 5000, 'v').then(()=>{ w.dataset.rot=wr; place(w); if(typeof ballCarrier!=='undefined'&&ballCarrier===w&&typeof moveBallTo==='function') moveBallTo(w,ballHand); }));
+      anims.push(swimSettle(w, c, 5000, wr, 'v'));
     });
     // Blue defenders (match perimeter attackers, 1m goal-side)
     const usedBlue=[];
@@ -10649,23 +10674,23 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       const dp={ x:c.x+dirx/dl*1.0, y:c.y+diry/dl*1.0 };
       const b=blues[idx]; usedBlue.push(b);
       const br=faceTo(dp.x,dp.y, c.x,c.y);                            // defender faces attacker
-      anims.push(swim(b, dp, 5000, 'v').then(()=>{ b.dataset.rot=br; place(b); }));
+      anims.push(swimSettle(b, dp, 5000, br, 'v'));
     });
     // Centre couple (zone 6): white centre at 2.5m facing OUT to the ball;
     // blue centre defender behind (between centre and goal), also facing ball.
     const ballCarrierPt = zoneCentroid('z4');
     const cW={ x:BLUE_GOAL.x+2.5, y:CY };
     const cWrot=faceTo(cW.x,cW.y, ballCarrierPt.x,ballCarrierPt.y);
-    anims.push(swim(centerWhite, cW, 5000, 'v').then(()=>{ centerWhite.dataset.rot=cWrot; place(centerWhite); }));
+    anims.push(swimSettle(centerWhite, cW, 5000, cWrot, 'v'));
     const cB={ x:cW.x-0.9, y:CY };   // just behind the centre, in contact — not up against the keeper
     const blueCenterDef = blues.filter(b=>usedBlue.indexOf(b)<0)[0];
     const cBrot=faceTo(cB.x,cB.y, ballCarrierPt.x,ballCarrierPt.y);
-    anims.push(swim(blueCenterDef, cB, 5000, 'v').then(()=>{ blueCenterDef.dataset.rot=cBrot; place(blueCenterDef); }));
+    anims.push(swimSettle(blueCenterDef, cB, 5000, cBrot, 'v'));
 
     // Goalkeepers
     const bgk=blueGoalie(), wgk=whiteGoalie();
-    if(bgk){ const gp={x:BLUE_GOAL.x+0.6,y:CY}; anims.push(swim(bgk, gp, 5000, 'v').then(()=>{ bgk.dataset.rot=faceTo(gp.x,gp.y, ballCarrierPt.x,ballCarrierPt.y); place(bgk); })); } // blue GK: smart position toward ball (near the line)
-    if(wgk){ anims.push(swim(wgk, {x:WHITE_GOAL.x-4, y:CY}, 5000, 'h').then(()=>{ wgk.dataset.rot=270; place(wgk); })); }         // white GK: horizontal, 4m ahead, central
+    if(bgk){ const gp={x:BLUE_GOAL.x+0.6,y:CY}; anims.push(swimSettle(bgk, gp, 5000, faceTo(gp.x,gp.y, ballCarrierPt.x,ballCarrierPt.y), 'v')); } // blue GK: swims horizontal, settles vertical near the line
+    if(wgk){ anims.push(swimSettle(wgk, {x:WHITE_GOAL.x-4, y:CY}, 5000, 270, 'h')); }                                                            // white GK: horizontal, 4m ahead, central
 
     await Promise.all(anims);
     if(carrier && typeof moveBallTo==='function') moveBallTo(carrier, 'right');   // ball rests with zone-4 attacker
@@ -10706,17 +10731,13 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     steps.push(watch('Teams also have substitute players who can enter during the game.',
       ()=>{ PX.flash('SUBSTITUTES','',1200); }));
 
-    // 1.7 Referees — white circles R1/R2, spotlight then red-circle arrows (auto)
-    steps.push({
-      instruction:'A water polo game can be officiated by one or two referees — R1 and R2 — who observe the game and enforce the rules.',
-      bannerSide:'top', skipDimPhase:true, highlight:null, skipSuccessMessage:true,
-      onEnter:function(){ PX._refDone=false; PX.showReferees(); PX.refereeIntro().then(()=>{ PX._refDone=true; }); },
-      validate:{ type:'custom', fn:()=> PX._refDone===true }
-    });
+    // 1.7 Referees — white circles R1/R2, spotlight then red-circle arrows; "Got it" to advance
+    steps.push(watch('A water polo game can be officiated by one or two referees — R1 and R2 — who observe the game and enforce the rules.',
+      function(){ PX.showReferees(); PX.refereeIntro(); }));
 
     // 1.8 Ready to start
     steps.push(watch('Each period starts with the teams at opposite ends of the pool, and the ball in the centre.',
-      ()=>{ PX.centerBall(); setTimeout(PX.whistle, 600); }));
+      ()=>{ PX.clearRefIntro(); PX.centerBall(); setTimeout(PX.whistle, 600); }));
 
     // 1.9a YOU TRY — swim-off: move the White centre player toward the ball
     steps.push({
@@ -10742,16 +10763,16 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       validate:{ type:'custom', fn:()=> PX._setupDone===true }
     });
 
-    // 1.11 YOU TRY — tap the White goalkeeper (two-hand privilege)
+    // 1.11 YOU TRY — tap the Blue goalkeeper (the defending keeper, two-hand privilege)
     steps.push({
-      instruction:'One player may touch the ball with two hands inside their own 6-metre area. Tap the White goalkeeper.',
+      instruction:'One player may touch the ball with two hands inside their own 6-metre area. Tap the Blue goalkeeper.',
       bannerSide:'top', skipDimPhase:false,
-      highlight: ()=> { const g=whiteGoalie(); return g ? ('.player[data-label="'+g.dataset.label+'"]') : '.player[data-team="goalie"]'; },
+      highlight: ()=> { const g=blueGoalie(); return g ? ('.player[data-label="'+g.dataset.label+'"]') : '.player[data-team="goalie"]'; },
       onEnter:function(){ PX._gkTapped=false;
         PX.tap.arm({
-          test:function(hit){ return !!(hit.player && hit.player.dataset.team==='goalie' && (hit.player.dataset.label||'')[0]==='W'); },
+          test:function(hit){ return !!(hit.player && hit.player.dataset.team==='goalie' && (hit.player.dataset.label||'')[0]==='B'); },
           onCorrect:function(hit){ PX._gkTapped=true; hit.player.classList.add('selected'); PX.flash('Correct — the goalkeeper','good',1600); },
-          onWrong:function(hit){ if(hit.player && hit.player.dataset.team==='goalie') PX.flash('That’s the Blue goalkeeper — tap the White one','',1200); else if(hit.player) PX.flash('That’s a field player — the goalkeeper is highlighted','',1200); }
+          onWrong:function(hit){ if(hit.player && hit.player.dataset.team==='goalie') PX.flash('That’s the White goalkeeper — tap the Blue one','',1200); else if(hit.player) PX.flash('That’s a field player — the goalkeeper is highlighted','',1200); }
         });
       },
       validate:{ type:'custom', fn:()=> PX._gkTapped===true }
@@ -10760,6 +10781,10 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     // 1.12 UNDERSTAND
     steps.push(watch('UNDERSTAND — The field: two goals and playing areas. The teams: 6 field players + 1 goalkeeper. The start: a swim-off. The officials: 1 or 2 referees.',
       ()=>{ PX.tap.disarm(); PX.flash('LESSON 1 COMPLETE','good',1600); }));
+
+    // Every scene starts with the instruction box visible; a headline in the
+    // scene's own onEnter then hides it and it fades back 0.5s later.
+    steps.forEach(s=>{ const orig=s.onEnter; s.onEnter=function(){ const bn=document.getElementById('tutorialBanner'); if(bn) bn.style.opacity='1'; if(PX._bannerT) clearTimeout(PX._bannerT); if(typeof orig==='function') orig.call(this); }; });
 
     return steps;
   };
@@ -10774,15 +10799,17 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     // short of the middle line. Blue centre ends 0.5m from the ball as White arrives.
     const SWIM_MS = 5000;   // the swim-off takes about 5 seconds
     const anims=[];
-    if(wC) anims.push(swim(wC, { x:MID_X, y:CY }, SWIM_MS, 'h'));
+    // White centre stops half a metre short so its (right) hand meets the ball
+    // rather than swimming past it before passing.
+    if(wC) anims.push(swim(wC, { x:MID_X+0.5, y:CY }, SWIM_MS, 'h'));
     if(bC) anims.push(swim(bC, { x:MID_X-0.5, y:CY }, SWIM_MS, 'h'));   // 0.5m short of the ball
     otherW.forEach(p=> anims.push(swim(p, { x:MID_X+2, y:+p.dataset.y }, SWIM_MS, 'h')));  // 2m past midline on White's side
     otherB.forEach(p=> anims.push(swim(p, { x:MID_X-2, y:+p.dataset.y }, SWIM_MS, 'h')));  // 2m on Blue's side
     await Promise.all(anims);
-    // White reaches the ball first -> possession
-    if(wC && typeof moveBallTo==='function'){ moveBallTo(wC, 'left'); }
-    PX.flash('WHITE POSSESSION','good',1400);
-    await delay(600);
+    // Hand touches the ball -> White takes possession and immediately moves it on.
+    if(wC && typeof moveBallTo==='function'){ moveBallTo(wC, 'right'); }
+    PX.flash('WHITE POSSESSION','good',1000);
+    await delay(250);
     // Back-pass to the teammate on White's left-and-behind (south-east while
     // facing the attack), to bring the team into settled possession.
     const target = otherW
@@ -10798,7 +10825,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   function injectBannerCss(){
     if(document.getElementById('pxBannerCss')) return;
     const s=document.createElement('style'); s.id='pxBannerCss';
-    s.textContent = 'body.pxParentMode #tutorialBanner{ left:50% !important; top:12px !important; right:auto !important; bottom:auto !important; transform:translateX(-50%) !important; }';
+    s.textContent = 'body.pxParentMode #tutorialBanner{ left:50% !important; top:12px !important; right:auto !important; bottom:auto !important; transform:translateX(-50%) !important; transition:opacity .5s ease !important; }';
     document.head.appendChild(s);
   }
 
