@@ -10577,19 +10577,23 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
      ===================================================================== */
   PX.shoot = (function(){
     let active=false, side='left', target=null, onResultCb=null, autoRestart=false, zone=null, marker=null, btn=null;
-    function mouthRectPx(){ const gx=GEO.goalLineX(side); const inX=gx===2?gx+1.6:gx-1.6;
-      const a=boardToScreen(Math.min(gx,inX), GEO.CFG.mouthY0-0.6), b=boardToScreen(Math.max(gx,inX), GEO.CFG.mouthY1+0.6);
+    function mouthRectPx(){ const gx=GEO.goalLineX(side); const inX=gx===2?gx+6:gx-6;   // generous, easy-to-tap aim area
+      const a=boardToScreen(Math.min(gx,inX), GEO.CFG.mouthY0-2.5), b=boardToScreen(Math.max(gx,inX), GEO.CFG.mouthY1+2.5);
       return { left:a.left, top:a.top, right:b.left, bottom:b.top }; }
     function placeZone(){ if(!zone) return; const r=mouthRectPx(); zone.style.left=r.left; zone.style.top=r.top; zone.style.width='calc('+r.right+' - '+r.left+')'; zone.style.height='calc('+r.bottom+' - '+r.top+')'; }
     function placeMarker(){ if(!marker||!target) return; const s=boardToScreen(target.x,target.y); marker.style.left=s.left; marker.style.top=s.top; marker.style.display='block'; }
     function begin(opts){ opts=opts||{}; side=opts.side||'left'; onResultCb=opts.onResult||null; autoRestart=!!opts.autoRestart; target=null; active=true;
       const bd=boardEl();
-      zone=make('div','pxShootZone','position:absolute;z-index:120;border:2px dashed rgba(21,101,192,.85);border-radius:8px;background:rgba(21,101,192,.10);cursor:crosshair;'); zone.id='pxShootZone'; bd.appendChild(zone); placeZone();
+      zone=make('div','pxShootZone','position:absolute;z-index:120;border:2px dashed rgba(21,101,192,.85);border-radius:8px;background:rgba(21,101,192,.10);cursor:crosshair;touch-action:none;pointer-events:auto;'); zone.id='pxShootZone'; bd.appendChild(zone); placeZone();
       marker=make('div','pxShootMarker','position:absolute;z-index:130;width:22px;height:22px;transform:translate(-50%,-50%);display:none;pointer-events:none;'); marker.id='pxShootMarker';
       marker.innerHTML='<svg viewBox="0 0 22 22" width="22" height="22"><circle cx="11" cy="11" r="9" fill="none" stroke="#c62828" stroke-width="2.5"/><line x1="11" y1="1" x2="11" y2="21" stroke="#c62828" stroke-width="2"/><line x1="1" y1="11" x2="21" y2="11" stroke="#c62828" stroke-width="2"/></svg>'; bd.appendChild(marker);
-      btn=make('button','pxShootBtn','position:fixed;left:50%;bottom:6%;transform:translateX(-50%);z-index:9500;font:800 18px system-ui;color:#fff;background:#c62828;border:none;border-radius:999px;padding:14px 42px;box-shadow:0 8px 26px rgba(0,0,0,.35);opacity:.45;cursor:not-allowed;letter-spacing:.06em;');
+      btn=make('button','pxShootBtn','position:fixed;left:50%;bottom:8%;transform:translateX(-50%);z-index:10000;font:800 20px system-ui;color:#fff;background:#c62828;border:none;border-radius:999px;padding:16px 48px;box-shadow:0 8px 26px rgba(0,0,0,.35);opacity:.45;cursor:not-allowed;letter-spacing:.06em;touch-action:manipulation;pointer-events:auto;');
       btn.id='pxShootBtn'; btn.textContent='SHOOT'; btn.disabled=true; document.body.appendChild(btn);
-      zone.addEventListener('pointerdown', onTap); PX._shootResize=()=>{ placeZone(); placeMarker(); }; window.addEventListener('resize', PX._shootResize); btn.addEventListener('click', fire);
+      zone.addEventListener('pointerdown', onTap);
+      PX._shootResize=()=>{ placeZone(); placeMarker(); }; window.addEventListener('resize', PX._shootResize);
+      // Fire on pointerup AND click (touch devices can suppress click), guarded against a double-fire.
+      const fireHandler=function(ev){ if(ev){ ev.preventDefault(); ev.stopPropagation(); } if(btn && btn.disabled) return; if(btn._pxLock) return; btn._pxLock=true; fire(); };
+      btn.addEventListener('pointerup', fireHandler); btn.addEventListener('click', fireHandler);
       PX.flash('Choose where to shoot','',1400);
     }
     function onTap(e){ e.preventDefault(); e.stopPropagation(); const m=pxToM(e); target=GEO.clampToMouth(m.x,m.y,side); placeMarker(); if(btn){ btn.disabled=false; btn.style.opacity='1'; btn.style.cursor='pointer'; } }
@@ -10611,9 +10615,19 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
      ===================================================================== */
   PX.choice = (function(){ let bar=null, answered=null, correctVal=null, cb=null;
     function ask(opts){ clear(); answered=null; correctVal=('correct' in opts)?opts.correct:null; cb=opts.onAnswer||null;
-      bar=make('div','pxChoiceBar','position:fixed;left:50%;bottom:7%;transform:translateX(-50%);z-index:9500;display:flex;gap:14px;background:rgba(11,26,51,.92);padding:14px 18px;border-radius:16px;box-shadow:0 10px 34px rgba(0,0,0,.35);'); bar.id='pxChoiceBar';
-      (opts.options||[]).forEach(o=>{ const b=make('button','pxChoiceBtn','font:800 16px system-ui;color:#0b1a33;background:#fff;border:none;border-radius:10px;padding:12px 26px;cursor:pointer;'); b.textContent=o.label;
-        b.addEventListener('click',()=>{ answered=o.value; if(correctVal===null||o.value===correctVal){ b.style.background='#178a4a'; b.style.color='#fff'; if(cb) cb(o.value,true); } else { b.style.background='#c62828'; b.style.color='#fff'; PX.flash('Not quite — try again','',900); if(cb) cb(o.value,false); setTimeout(()=>{ b.style.background='#fff'; b.style.color='#0b1a33'; answered=null; },700); } }); bar.appendChild(b); });
+      bar=make('div','pxChoiceBar','position:fixed;left:50%;bottom:12%;transform:translateX(-50%);z-index:10000;display:flex;gap:16px;background:rgba(11,26,51,.94);padding:16px 20px;border-radius:16px;box-shadow:0 10px 34px rgba(0,0,0,.4);pointer-events:auto;touch-action:manipulation;'); bar.id='pxChoiceBar';
+      (opts.options||[]).forEach(o=>{
+        const b=make('button','pxChoiceBtn','font:800 18px system-ui;color:#0b1a33;background:#fff;border:none;border-radius:12px;padding:14px 32px;min-width:96px;cursor:pointer;pointer-events:auto;touch-action:manipulation;'); b.textContent=o.label;
+        // Fire on pointerup AND click (touch devices sometimes suppress click);
+        // a short guard prevents the pair from double-triggering.
+        const handle=function(ev){ if(ev){ ev.preventDefault(); ev.stopPropagation(); } if(b._pxLock) return; b._pxLock=true; setTimeout(()=>{ b._pxLock=false; }, 500);
+          answered=o.value;
+          if(correctVal===null||o.value===correctVal){ b.style.background='#178a4a'; b.style.color='#fff'; if(cb) cb(o.value,true); }
+          else { b.style.background='#c62828'; b.style.color='#fff'; PX.flash('Not quite — try again','',900); if(cb) cb(o.value,false); setTimeout(()=>{ b.style.background='#fff'; b.style.color='#0b1a33'; answered=null; },700); }
+        };
+        b.addEventListener('pointerup', handle); b.addEventListener('click', handle);
+        bar.appendChild(b);
+      });
       document.body.appendChild(bar); }
     function clear(){ if(bar){ bar.remove(); bar=null; } }
     return { ask, clear, isCorrect:()=>correctVal!==null&&answered===correctVal, value:()=>answered };
@@ -10718,7 +10732,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
 
     // 1.1 Welcome — only water
     steps.push(watch('Welcome to water polo. Let’s start with the place where everything happens — the pool.',
-      ()=>{ PX.clearActors(); PX.clearReferees(); PX.field.setPhase('water'); PX.flash('WATER POLO','',1400); }));
+      ()=>{ PX.clearActors(); PX.clearReferees(); PX.field.setPhase('water'); }));
 
     // 1.2 Two goals — outline + goals appear
     steps.push(watch('Two teams. Two goals. Each team protects one goal and attacks the other.',
@@ -10790,7 +10804,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
 
     // 1.12 UNDERSTAND
     steps.push(watch('UNDERSTAND — The field: two goals and playing areas. The teams: 6 field players + 1 goalkeeper. The start: a swim-off. The officials: 1 or 2 referees.',
-      ()=>{ PX.tap.disarm(); PX.flash('LESSON 1 COMPLETE','good',1600); }));
+      ()=>{ PX.tap.disarm(); PX.clearSelections(); PX.flash('LESSON 1 COMPLETE','good',1600); }));
 
     return steps;
   };
@@ -10832,14 +10846,20 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     const carrier=(typeof ballCarrier!=='undefined'&&ballCarrier&&ballCarrier.dataset.team==='white')?ballCarrier:w[0];
     const others=w.filter(p=>p!==carrier);
     const seq=[others[0], others[1], carrier].filter(Boolean);
-    for(const t of seq){ await passBallTo(t, 550); await delay(350); }
+    for(const t of seq){ await passBallTo(t, 550); await delay(1000); }   // each receiver holds the ball 1s
   }
   function currentWhiteShooter(){ return (typeof ballCarrier!=='undefined'&&ballCarrier&&ballCarrier.dataset.team==='white')?ballCarrier:whiteFields()[0]; }
+  // Clears any lingering player selection (e.g. the tapped goalie from Lesson 1).
+  PX.clearSelections = function(){ qa('.player.selected').forEach(p=>p.classList.remove('selected')); if(typeof clearSelection==='function'){ try{ clearSelection(); }catch(e){} } };
+  // Keeps the defending goalkeeper smart-positioned toward a target point.
+  function smartGoalie(gk, targetPt){ if(!gk||!targetPt) return; gk.dataset.pose='v'; gk.dataset.rot=faceTo(+gk.dataset.x,+gk.dataset.y, targetPt.x,targetPt.y); if(typeof place==='function') place(gk); }
   // Put the shooter at a clear angle to the goal so a near corner is genuinely
   // open past the centered keeper (teaches "aim where the keeper isn't").
   function setShooter(){
+    PX.clearSelections();
     const s=currentWhiteShooter();
     if(s){ setPlayer(s, 6, 8.5, 'v', faceTo(6,8.5, BLUE_GOAL.x, BLUE_GOAL.y)); if(typeof moveBallTo==='function') moveBallTo(s,'right'); }
+    smartGoalie(blueGoalie(), s ? {x:+s.dataset.x,y:+s.dataset.y} : {x:6,y:8.5});   // GK always smart-positioned to the shooter
     PX.flash('SHOOTING POSITION','',1400);
   }
   function beginParentShot(){
@@ -10879,52 +10899,120 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     if(typeof moveBallTo==='function') moveBallTo(whites[3], 'right');
   };
 
+  // Nearest blue defender to a given player.
+  function nearestBlue(atk){
+    if(!atk) return null; const ax=+atk.dataset.x, ay=+atk.dataset.y;
+    return blueFields().sort((a,b)=> (Math.hypot((+a.dataset.x)-ax,(+a.dataset.y)-ay)) - (Math.hypot((+b.dataset.x)-ax,(+b.dataset.y)-ay)))[0] || null;
+  }
+  // 2A.2 — the ball carrier turns side-on with the ball toward their OWN goal
+  // (+x, right) and the defender pressures the non-ball (left) arm — close, but
+  // never into or past the attacker.
+  function carrierPressureDemo(){
+    const atk=currentWhiteShooter(); if(!atk) return; const def=nearestBlue(atk); if(!def) return;
+    atk.dataset.pose='v'; atk.dataset.rot=0;                      // side-on; right arm points to +x (own goal)
+    if(typeof place==='function') place(atk);
+    if(typeof moveBallTo==='function') moveBallTo(atk,'right');   // ball on the right, toward own goal
+    const ax=+atk.dataset.x, ay=+atk.dataset.y;
+    swim(def, { x:ax-0.85, y:ay }, 1000);                        // to the left (non-ball) arm, close, not past
+  }
+  // 2A.3 — a defender holds a player who is NOT holding the ball.
+  function holdNonCarrierDemo(){
+    const carrier=currentWhiteShooter();
+    const other=whiteFields().filter(w=>w!==carrier)[0]; if(!other) return; const def=nearestBlue(other); if(!def) return;
+    const ox=+other.dataset.x, oy=+other.dataset.y;
+    swim(def, { x:ox-0.5, y:oy-0.25 }, 800);                     // hold: close, not into/past
+    setTimeout(()=>{ if(typeof PX.whistle==='function') PX.whistle(); }, 950);
+  }
+  // 2A.4 — the carrier releases the ball (ball off the hand, toward +x / own goal).
+  function ballReleaseDemo(){
+    const atk=currentWhiteShooter(); if(!atk) return;
+    atk.dataset.pose='v'; atk.dataset.rot=0; if(typeof place==='function') place(atk);
+    if(typeof ballCarrier!=='undefined') ballCarrier=null;       // no longer in possession
+    if(typeof ball!=='undefined' && ball){ ball.dataset.x=(+atk.dataset.x)+1.1; ball.dataset.y=(+atk.dataset.y)-0.2; if(typeof placeBall==='function') placeBall(); }
+  }
+
+  // Step 2.2 support: defender shadows the backing-up attacker keeping distance;
+  // both then return to their original spots while the passes are played.
+  let _followAtk=null, _followDef=null, _followOff=null, _atkOrigin=null, _defOrigin=null;
+  function startFollow(atk, def){
+    if(!atk||!def) return;
+    _followAtk=atk; _followDef=def;
+    _atkOrigin={x:+atk.dataset.x,y:+atk.dataset.y}; _defOrigin={x:+def.dataset.x,y:+def.dataset.y};
+    _followOff={x:_defOrigin.x-_atkOrigin.x, y:_defOrigin.y-_atkOrigin.y};
+    PX._followActive=true;
+    (function loop(){ if(!PX._followActive) return; if(_followAtk&&_followDef){ _followDef.dataset.x=(+_followAtk.dataset.x)+_followOff.x; _followDef.dataset.y=(+_followAtk.dataset.y)+_followOff.y; if(typeof place==='function') place(_followDef); } requestAnimationFrame(loop); })();
+  }
+  function stopFollow(){ PX._followActive=false; }
+  function returnFromBackup(){
+    stopFollow();
+    const a=(_followAtk&&_atkOrigin)?swim(_followAtk,_atkOrigin,1500):Promise.resolve();
+    const d=(_followDef&&_defOrigin)?swim(_followDef,_defOrigin,1500):Promise.resolve();
+    return Promise.all([a,d]);
+  }
+
   PX.buildLesson2Steps = function(){
     const steps=[];
-    let drivePlayer=null, driveStartX=null;
+    let drivePlayer=null, driveTarget=null;
 
     // 2.1 — blend the zones out, then show which goal White attacks
     steps.push(watch('Now the game is live. White protects the far goal — and attacks the Blue goal.',
       ()=>{ PX.field.setPhase('lines'); PX.ensureOffenseBoard(); PX.blendOutZones(); setTimeout(()=>{ pulseGoal('right','#1565c0',1500); setTimeout(()=>pulseGoal('left','#e8362a',1600), 1600); }, 800); }));
 
-    // 2.2 YOU TRY — drive toward the attacking (left) goal
-    steps.push({
-      instruction:'Move a White player towards the goal they are attacking — the left (Blue) goal.',
+    // 2.2 YOU TRY — under pressure, protect the ball by easing back to the ghost
+    const step22 = {
+      instruction:'Under pressure from the defender, the attacker protects the ball by easing slowly back. Move the White player onto the ghosted spot.',
       bannerSide:'top', skipDimPhase:false,
       highlight: ()=> { const c=currentWhiteShooter(); return c?('.player[data-label="'+c.dataset.label+'"]'):'.player[data-team="white"]'; },
-      onEnter:function(){ drivePlayer=currentWhiteShooter(); driveStartX=drivePlayer?+drivePlayer.dataset.x:null; },
-      validate:{ type:'custom', fn:function(){ if(!drivePlayer||driveStartX==null) return false; return (+drivePlayer.dataset.x) <= driveStartX-1.2; } }
-    });
+      onEnter:function(){
+        drivePlayer=currentWhiteShooter();
+        if(drivePlayer){
+          const def=nearestBlue(drivePlayer);
+          if(def) startFollow(drivePlayer, def);   // defender shadows, keeping the same distance
+          const tx=(+drivePlayer.dataset.x)+2.2, ty=+drivePlayer.dataset.y;   // back = away from the left goal
+          driveTarget={x:tx,y:ty};
+          step22.ghost={ type:'playerPosition', targetPlayer:{ team:drivePlayer.dataset.team, pose:drivePlayer.dataset.pose, rot:+drivePlayer.dataset.rot||0, x:tx, y:ty, label:drivePlayer.dataset.label } };
+        }
+      },
+      validate:{ type:'custom', fn:function(){ if(!drivePlayer||!driveTarget) return false; return Math.hypot((+drivePlayer.dataset.x)-driveTarget.x,(+drivePlayer.dataset.y)-driveTarget.y) <= 0.8; } }
+    };
+    steps.push(step22);
 
-    // 2.3 Moving the ball — a few one-handed passes
+    // 2.3 Both slide back to their original spots, then the passing combo (1s each)
     steps.push({
-      instruction:'Players swim, pass and create space to build a chance. Field players play the ball with one hand.',
+      instruction:'Good — as the ball is passed the players slide back into position. Field players play the ball with one hand, holding it briefly before the next pass.',
       bannerSide:'top', skipDimPhase:true, highlight:null, skipSuccessMessage:true,
-      onEnter:function(){ PX._passDone=false; passRoutine().then(()=>{ PX._passDone=true; }); },
+      onEnter:function(){ PX._passDone=false; returnFromBackup().then(()=>passRoutine()).then(()=>{ PX._passDone=true; }); },
       validate:{ type:'custom', fn:()=> PX._passDone===true }
     });
 
     // ---- LESSON 2A — PHYSICALITY ----
+    // 2A.1 contact is allowed
     steps.push(watch('Water polo is a physical sport. Touching and body contact between players is allowed — so this on its own is not a foul.',
       ()=>{ PX.flash('CONTACT — PLAY ON','',1600); }));
-    steps.push(watch('An important principle: a player who is holding the ball can be challenged much more physically.',
-      ()=>{ PX.flash('BALL CARRIER — STRONG CONTACT ALLOWED','',1800); }));
-    steps.push(watch('But holding, sinking or pulling back a player who is NOT holding the ball is generally an exclusion foul. The key question is: does the player have the ball?',
-      ()=>{ setTimeout(()=>{ if(typeof PX.whistle==='function') PX.whistle(); }, 500); }));
-
-    // 2A.4 YOU TRY — ball or no ball?
+    // 2A.2 strong contact on the ball carrier is allowed (3s announcement + animation)
+    steps.push(watch('An important principle: a player who is holding the ball can be challenged much more physically. Strong contact on the ball carrier is allowed.',
+      ()=>{ PX.flash('STRONG CONTACT ON THE BALL CARRIER IS ALLOWED','',3000); carrierPressureDemo(); }));
+    // 2A.3 holding a player who is NOT holding the ball = foul / exclusion
+    steps.push(watch('Holding, sinking or pulling back a player who is NOT holding the ball is a foul — and depending on the situation and its intensity, it can even be an exclusion foul.',
+      ()=>{ holdNonCarrierDemo(); PX.flash('FOUL','',1800); }));
+    // 2A.4 YOU TRY — is the player still in possession? (release animation; just the question)
     steps.push({
-      instruction:'The ball is right next to this attacker — but is the player actually in possession of it?',
+      instruction:'Is the player still in possession of the ball?',
       bannerSide:'top', skipDimPhase:true, highlight:null,
-      onEnter:function(){ PX._bnbDone=false;
+      onEnter:function(){ PX._bnbDone=false; ballReleaseDemo();
         PX.choice.ask({ options:[{label:'YES',value:'yes'},{label:'NO',value:'no'}], correct:'no',
-          onAnswer:function(v,ok){ if(ok){ PX._bnbDone=true; PX.choice.clear(); PX.flash('Correct — being close is not the same as holding','good',1900); } } });
+          onAnswer:function(v,ok){ if(ok){ PX._bnbDone=true; PX.choice.clear(); PX.flash('Correct — he has released the ball, so he is not in possession','good',2100); } } });
       },
       validate:{ type:'custom', fn:()=> PX._bnbDone===true }
     });
-
-    steps.push(watch('Water polo is physical — but unnecessarily rough or illegal play can be punished with an exclusion, or more.',
-      ()=>{ setTimeout(()=>{ if(typeof PX.whistle==='function') PX.whistle(); }, 400); PX.flash('EXCLUSION','',1500); }));
+    // 2A.5 rough / illegal play
+    steps.push(watch('Unnecessarily rough or illegal play can be punished with an ordinary foul or an exclusion.',
+      ()=>{ setTimeout(()=>{ if(typeof PX.whistle==='function') PX.whistle(); }, 400); PX.flash('ORDINARY FOUL / EXCLUSION','',1700); }));
+    // 2A.6 the ball-under-water rule
+    steps.push(watch('The ball-under-water rule: if a player who is holding the ball takes it under the surface, it is an ordinary foul and possession changes to the other team.',
+      ()=>{ setTimeout(()=>{ if(typeof PX.whistle==='function') PX.whistle(); }, 400); PX.flash('BALL UNDER → CHANGE OF POSSESSION','',2200); }));
+    steps.push(watch('One exception: if the goalkeeper takes the ball under inside their own 6-meter zone, it is a penalty throw for the other team.',
+      ()=>{ setTimeout(()=>{ if(typeof PX.whistle==='function') PX.whistle(); }, 400); PX.flash('GK BALL UNDER IN 6m → PENALTY','',2200); }));
 
     // ---- BACK TO LESSON 2 — SCORING ----
     steps.push(watch('The attacking team creates enough space for an open shot.',
