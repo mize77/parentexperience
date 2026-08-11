@@ -10314,7 +10314,6 @@ document.getElementById('toolPanelBackdrop').addEventListener('click', ()=>{ clo
 document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels(); });
 </script>
 
-<!-- ===== XquiX Parent Experience (Water Polo 1x1) — Lessons 1-2 ===== -->
 <script>
 /* ============================================================================
    XquiX Parent Experience — Water Polo 1x1   (Lesson 1, revised)
@@ -10802,11 +10801,13 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     const step19a = {
       instruction:'The swim-off! Tap and drag the highlighted White player forward onto the ghost at the 5-metre line.',
       bannerSide:'top', skipDimPhase:true, highlight:null,   // no engine ring — one spotlight circle only
+      // exempt ONLY the draggable White player from the interaction lock (no engine ring drawn)
+      allowedSelectors: function(){ const w=whiteCenter(); return w ? ('.player[data-label="'+w.dataset.label+'"]') : null; },
       onEnter:function(){ PX.whistle();
         const w=whiteCenter();
         if(w){ const tx=22, ty=CY;   // the 5m line on White's side (x=22)
           step19a.ghost={ type:'playerPosition', targetPlayer:{ team:w.dataset.team, pose:w.dataset.pose, rot:+w.dataset.rot||0, x:tx, y:ty, label:w.dataset.label } };
-          spotlightBetween(+w.dataset.x, +w.dataset.y, tx, ty, true); }   // ONE circle around player + ghost
+          spotlightBetween(+w.dataset.x, +w.dataset.y, tx, ty, false); }   // ONE circle around player + ghost
       },
       validate:{ type:'custom', fn:function(){ const w=whiteCenter(); if(!w) return false; return (+w.dataset.x) <= 22.6; } }   // reached the 5m line
     };
@@ -11112,6 +11113,8 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     const step22 = {
       instruction:'Under pressure from the defender, the attacker protects the ball by easing back. Tap and drag the White player back onto the ghosted spot.',
       bannerSide:'top', skipDimPhase:true, highlight:null,   // no engine ring — one spotlight circle only
+      // exempt ONLY the draggable White player from the interaction lock (no engine ring drawn)
+      allowedSelectors: function(){ return drivePlayer ? ('.player[data-label="'+drivePlayer.dataset.label+'"]') : null; },
       onEnter:function(){
         drivePlayer=currentWhiteShooter();
         if(drivePlayer){
@@ -11121,7 +11124,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
           const tx=sx+2.2, ty=sy;   // back = away from the left goal
           driveTarget={x:tx,y:ty};
           step22.ghost={ type:'playerPosition', targetPlayer:{ team:drivePlayer.dataset.team, pose:drivePlayer.dataset.pose, rot:+drivePlayer.dataset.rot||0, x:tx, y:ty, label:drivePlayer.dataset.label } };
-          spotlightBetween(sx, sy, tx, ty, true);   // ONE circle around player + ghost
+          spotlightBetween(sx, sy, tx, ty, false);   // ONE circle around player + ghost
         }
       },
       validate:{ type:'custom', fn:function(){ if(!drivePlayer||!driveTarget) return false; return Math.hypot((+drivePlayer.dataset.x)-driveTarget.x,(+drivePlayer.dataset.y)-driveTarget.y) <= 0.8; } }
@@ -11139,7 +11142,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       ()=>{ PX.flash('CONTACT — PLAY ON','',1600); }));
     // 2A.2 strong contact on the ball carrier is allowed (3s announcement + animation + spotlight)
     steps.push(watch('An important principle: a player who is holding the ball can be challenged much more physically. Strong contact on the ball carrier is allowed.',
-      ()=>{ PX.flash('STRONG CONTACT ON THE BALL CARRIER IS ALLOWED',''); carrierPressureDemo(); const a=currentWhiteShooter(); if(a) setTimeout(()=>spotlightCircle(+a.dataset.x,+a.dataset.y,2.6,true), 400); }));
+      ()=>{ PX.flash('STRONG CONTACT ON THE BALL CARRIER IS ALLOWED',''); carrierPressureDemo(); const a=currentWhiteShooter(); if(a) setTimeout(()=>spotlightCircle(+a.dataset.x,+a.dataset.y,2.6,false), 400); }));
     // 2A.3 holding a player who is NOT holding the ball = foul / exclusion (18s)
     steps.push(watch('Holding, sinking or pulling back a player who is NOT holding the ball is a foul. There are two levels: an ordinary foul, or — for a more serious or intense action — an exclusion, where the excluded player must leave the field of play for 18 seconds.',
       ()=>{ holdZone5Demo(); }));
@@ -11167,7 +11170,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
 
     // ---- BACK TO LESSON 2 — SCORING ----
     steps.push(watch('The attacking team creates enough space for an open shot.',
-      ()=>{ setShooter(); setTimeout(()=>spotlightCircle(8,14,2.8,true), 950); }));
+      ()=>{ setShooter(); setTimeout(()=>spotlightCircle(8,14,2.8,false), 950); }));
 
     // 2.5 / 2.6 — SHOOT (live). Retry until a goal so the story continues.
     steps.push({
@@ -11184,7 +11187,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       onEnter:function(){ PX._goalDragged=false; setShootingAngle(false);
         if(typeof ballCarrier!=='undefined') ballCarrier=null;   // keep the ball where the shot left it — on the line
         const by=(typeof ball!=='undefined'&&ball)?+ball.dataset.y:CY;
-        spotlightCircle(BLUE_GOAL.x, by, 3.0, true);
+        spotlightCircle(BLUE_GOAL.x, by, 3.0, false);
         armBallDrag('left', function(){ PX._goalDragged=true; clearHoldCinematic(); PX.flash('GOAL!','goal'); });
       },
       validate:{ type:'custom', fn:()=> PX._goalDragged===true }
@@ -11289,8 +11292,9 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     const nav=make('div'); nav.id='pxNav';
     nav.style.cssText='position:fixed;left:12px;bottom:12px;z-index:9400;display:flex;flex-direction:column;gap:8px;';
     const mk=(label,bg,fn)=>{ const b=make('button'); b.textContent=label;
-      b.style.cssText='font:700 13px system-ui;color:#fff;background:'+bg+';border:none;border-radius:10px;padding:10px 14px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.3);text-align:left;';
-      b.addEventListener('click',fn); return b; };
+      b.style.cssText='font:700 13px system-ui;color:#fff;background:'+bg+';border:none;border-radius:10px;padding:10px 14px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.3);text-align:left;touch-action:manipulation;pointer-events:auto;';
+      const h=function(ev){ if(ev){ ev.preventDefault(); ev.stopPropagation(); } if(b._pxLock) return; b._pxLock=true; setTimeout(()=>{ b._pxLock=false; }, 400); if(typeof fn==='function') fn(); };
+      b.addEventListener('pointerup',h); b.addEventListener('click',h); return b; };
     nav.appendChild(mk('Exit tutorial','#8a3a3a', PX.exitWp));
     nav.appendChild(mk('Move to next lesson →','#1a6363', PX.nextLesson));
     document.body.appendChild(nav);
