@@ -10652,8 +10652,12 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   PX.shoot = (function(){
     let active=false, side='left', target=null, onResultCb=null, autoRestart=false, zone=null, marker=null, btn=null, cornerScore=false, forceSave=false, stopOnLine=false, saveBounce=false, ghostEl=null;
     function mouthRectPx(){ const gx=GEO.goalLineX(side); const inX=gx===2?gx+6:gx-6;   // generous, easy-to-tap aim area
-      const a=boardToScreen(Math.min(gx,inX), GEO.CFG.mouthY0-2.5), b=boardToScreen(Math.max(gx,inX), GEO.CFG.mouthY1+2.5);
-      return { left:a.left, top:a.top, right:b.left, bottom:b.top }; }
+      // Take the BOUNDING BOX of all four corners (not just two) so the tap zone
+      // is correct even in Front Court, where the field is rotated 90°.
+      const x0=Math.min(gx,inX), x1=Math.max(gx,inX), y0=GEO.CFG.mouthY0-2.5, y1=GEO.CFG.mouthY1+2.5;
+      const cs=[boardToScreen(x0,y0), boardToScreen(x1,y0), boardToScreen(x1,y1), boardToScreen(x0,y1)];
+      const ls=cs.map(c=>parseFloat(c.left)), ts=cs.map(c=>parseFloat(c.top));
+      return { left:Math.min.apply(null,ls)+'%', top:Math.min.apply(null,ts)+'%', right:Math.max.apply(null,ls)+'%', bottom:Math.max.apply(null,ts)+'%' }; }
     function placeZone(){ if(!zone) return; const r=mouthRectPx(); zone.style.left=r.left; zone.style.top=r.top; zone.style.width='calc('+r.right+' - '+r.left+')'; zone.style.height='calc('+r.bottom+' - '+r.top+')'; }
     function placeMarker(){ if(!marker||!target) return; const s=boardToScreen(target.x,target.y); marker.style.left=s.left; marker.style.top=s.top; marker.style.display='block'; }
     function begin(opts){ opts=opts||{}; side=opts.side||'left'; onResultCb=opts.onResult||null; autoRestart=!!opts.autoRestart; cornerScore=!!opts.cornerScore; forceSave=!!opts.forceSave; stopOnLine=!!opts.stopOnLine; saveBounce=!!opts.saveBounce; target=null; active=true;
@@ -10662,15 +10666,21 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       if(ghostEl){ ghostEl.remove(); ghostEl=null; }
       if(opts.ghost){ ghostEl=make('div','pxShootGhost','position:absolute;z-index:125;width:24px;height:24px;transform:translate(-50%,-50%);pointer-events:none;'); ghostEl.id='pxShootGhost';
         ghostEl.innerHTML='<svg viewBox="0 0 24 24" width="24" height="24"><circle cx="12" cy="12" r="10" fill="rgba(255,210,63,.25)" stroke="#ffd23f" stroke-width="2" stroke-dasharray="3 3"/></svg>';
-        const gs=boardToScreen(opts.ghost.x, opts.ghost.y); ghostEl.style.left=gs.left; ghostEl.style.top=gs.top; bd.appendChild(ghostEl); }
+        const gs=boardToScreen(opts.ghost.x, opts.ghost.y); ghostEl.style.left=gs.left; ghostEl.style.top=gs.top; bd.appendChild(ghostEl);
+        // an arrow pointing at the marked spot on the goal line
+        const oldArr=document.getElementById('pxShootArrow'); if(oldArr) oldArr.remove();
+        const arr=fcSvgLayer(126); arr.id='pxShootArrow';
+        const gx2=opts.ghost.x, gy2=opts.ghost.y, tailx=(side==='left'?gx2+3.4:gx2-3.4), tipx=(side==='left'?gx2+1.0:gx2-1.0);
+        arr.innerHTML=fcWrap(svgArrow(tailx, gy2, tipx, gy2, '#e8362a'));
+        bd.appendChild(arr); requestAnimationFrame(()=>{ arr.style.opacity='1'; }); }
       const zoneStyle = opts.subtleZone
         ? 'position:absolute;z-index:120;border:none;background:transparent;cursor:crosshair;touch-action:none;pointer-events:auto;'
         : 'position:absolute;z-index:120;border:2px dashed rgba(21,101,192,.85);border-radius:8px;background:rgba(21,101,192,.10);cursor:crosshair;touch-action:none;pointer-events:auto;';
       zone=make('div','pxShootZone',zoneStyle); zone.id='pxShootZone'; bd.appendChild(zone); placeZone();
       marker=make('div','pxShootMarker','position:absolute;z-index:130;width:22px;height:22px;transform:translate(-50%,-50%);display:none;pointer-events:none;'); marker.id='pxShootMarker';
       marker.innerHTML='<svg viewBox="0 0 22 22" width="22" height="22"><circle cx="11" cy="11" r="9" fill="none" stroke="#c62828" stroke-width="2.5"/><line x1="11" y1="1" x2="11" y2="21" stroke="#c62828" stroke-width="2"/><line x1="1" y1="11" x2="21" y2="11" stroke="#c62828" stroke-width="2"/></svg>'; bd.appendChild(marker);
-      btn=make('button','pxShootBtn','position:fixed;left:50%;bottom:8%;transform:translateX(-50%);z-index:10000;font:800 20px system-ui;color:#fff;background:#c62828;border:none;border-radius:999px;padding:16px 48px;box-shadow:0 8px 26px rgba(0,0,0,.35);opacity:.45;cursor:not-allowed;letter-spacing:.06em;touch-action:manipulation;pointer-events:auto;');
-      btn.id='pxShootBtn'; btn.textContent='SHOOT'; btn.disabled=true; document.body.appendChild(btn);
+      btn=make('button','pxShootBtn','position:fixed;left:50%;bottom:8%;transform:translateX(-50%);z-index:10000;font:800 20px system-ui;color:#fff;background:#c62828;border:none;border-radius:999px;padding:16px 48px;box-shadow:0 8px 26px rgba(0,0,0,.35);cursor:pointer;letter-spacing:.06em;touch-action:manipulation;pointer-events:auto;display:none;');
+      btn.id='pxShootBtn'; btn.textContent='SHOOT'; btn.disabled=true; document.body.appendChild(btn);   // hidden until a spot is tapped (so it never covers the tap area)
       zone.addEventListener('pointerdown', onTap);
       PX._shootResize=()=>{ placeZone(); placeMarker(); }; window.addEventListener('resize', PX._shootResize);
       // Fire on pointerup AND click (touch devices can suppress click), guarded against a double-fire.
@@ -10678,7 +10688,10 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       btn.addEventListener('pointerup', fireHandler); btn.addEventListener('click', fireHandler);
       PX.flash('Tap the marked spot on the goal line','');
     }
-    function onTap(e){ e.preventDefault(); e.stopPropagation(); const m=pxToM(e); target=GEO.clampToMouth(m.x,m.y,side); placeMarker(); if(btn){ btn.disabled=false; btn.style.opacity='1'; btn.style.cursor='pointer'; } }
+    function onTap(e){ e.preventDefault(); e.stopPropagation(); const m=pxToM(e); target=GEO.clampToMouth(m.x,m.y,side); placeMarker();
+      const arr=document.getElementById('pxShootArrow'); if(arr){ arr.style.opacity='0'; setTimeout(()=>arr.remove(),300); }   // arrow done its job
+      if(btn){ btn.disabled=false; btn.style.display='block'; btn.style.opacity='1'; btn.style.cursor='pointer'; }   // reveal SHOOT only now
+    }
     function fire(){ if(!active||!target) return; active=false; if(zone) zone.style.pointerEvents='none'; if(btn){ btn.disabled=true; btn.style.opacity='.45'; }
       const from=ballObj(), keeperEl=keeperFor(side); if(typeof ballCarrier!=='undefined'){ try{ ballCarrier=null; }catch(e){} }
       const keeper=keeperEl?{x:+keeperEl.dataset.x,y:+keeperEl.dataset.y}:null;
@@ -10708,7 +10721,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
         PX.flash('GOAL','goal'); if(autoRestart) setTimeout(()=>PX.restartAtCenter(),1300);
       }
       if(onResultCb) onResultCb(res); }
-    function cleanup(){ if(PX._shootResize){ window.removeEventListener('resize',PX._shootResize); PX._shootResize=null; } if(zone){ zone.remove(); zone=null; } if(marker){ marker.remove(); marker=null; } if(btn){ btn.remove(); btn=null; } if(ghostEl){ ghostEl.remove(); ghostEl=null; } }
+    function cleanup(){ if(PX._shootResize){ window.removeEventListener('resize',PX._shootResize); PX._shootResize=null; } if(zone){ zone.remove(); zone=null; } if(marker){ marker.remove(); marker=null; } if(btn){ btn.remove(); btn=null; } if(ghostEl){ ghostEl.remove(); ghostEl=null; } const arr=document.getElementById('pxShootArrow'); if(arr) arr.remove(); }
     return { begin, cancel(){ active=false; cleanup(); }, get active(){ return active; } };
   })();
   PX.restartAtCenter = function(){ PX.centerBall(); PX.flash('RESTART','',1000); };
@@ -10905,7 +10918,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       function(){ return PX.setupOffense().then(()=>{ PX.flash('OFFENSE SET UP','good'); }); }));
 
     // 1.10b Brief note on the zones (numbers only) — then they blend out at the next step
-    steps.push(watch('The numbered circles are just orientation areas that help the players spread out — they are NOT official field markings. Coaches use different numbers or names for them; here we use the common 1–6 pattern.',
+    steps.push(watch('The numbered field zones are just orientation areas that help the players spread out — they are NOT official field markings. Coaches use different numbers or names for them; here we use the common 1–6 pattern.',
       ()=>{ /* zones from setup stay visible for this note; only their numbers show */ }));
 
     // 1.11 YOU TRY — tap the Blue goalkeeper (the defending keeper, two-hand privilege)
@@ -10924,7 +10937,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     });
 
     // 1.12 UNDERSTAND — learning points as a bullet list
-    steps.push(watch('UNDERSTAND\n• The field: two goals and playing areas (the numbered zones are orientation only, not official markings).\n• The teams: 6 field players + 1 goalkeeper.\n• Every player except the goalkeeper may touch the ball with only ONE hand.\n• The start: a swim-off.\n• The officials: 1 or 2 referees.',
+    steps.push(watch('UNDERSTAND\n• The field: two goals and playing areas.\n• The teams: 6 field players + 1 goalkeeper.\n• Every player except the goalkeeper may touch the ball with only ONE hand.\n• The start: a swim-off.\n• The officials: 1 or 2 referees.',
       ()=>{ PX.tap.disarm(); PX.clearSelections(); PX.flash('LESSON 1 COMPLETE','good'); }));
 
     return steps;
@@ -11041,9 +11054,15 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     const sx = base.x - 0.3, sy = base.y + towardCenter*1.6;                  // in toward the middle
     setPlayer(shooter, sx, sy, 'v', faceTo(sx,sy, BLUE_GOAL.x, BLUE_GOAL.y));
     if(def){
-      setPlayer(def, base.x, base.y, 'v', faceTo(base.x,base.y, sx,sy));      // face the shooter (a plain face, not smart tracking)
-      def.dataset.blockArm='right';                                          // ONE arm out to block — never both
-      if(typeof updatePlayerVisual==='function') updatePlayerVisual(def); else if(typeof place==='function') place(def);
+      // The defender MOVES to stay between the shooter and the goal, reaching the
+      // LEFT arm into the shooting-angle corridor.
+      const gdx=BLUE_GOAL.x-sx, gdy=BLUE_GOAL.y-sy, gl=Math.hypot(gdx,gdy)||1, ux=gdx/gl, uy=gdy/gl;
+      const dxg=sx+ux*1.3, dyg=sy+uy*1.3;                                     // 1.3m goal-side of the shooter
+      def.dataset.blockArm='left';                                           // left arm in the corridor (one arm only)
+      swimSettle(def, {x:dxg, y:dyg}, 800, faceTo(dxg,dyg, sx,sy), 'v').then(()=>{
+        if(typeof updatePlayerVisual==='function') updatePlayerVisual(def);
+        startFollow(shooter, def);                                           // keep following the shooter, staying goal-side
+      });
     }
     passBallTracking(shooter, 750, blueGoalie());                            // receive the ball; GK follows the pass (smart positioning)
     PX.flash('SHOOTING POSITION','');
@@ -11075,6 +11094,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     }
   }
   function restartToBlue(){
+    stopFollow();              // release the shooter's defender-follow before repositioning
     setShootingAngle(false);   // never carry the shooting-angle lines into the kick-off (they'd redraw for the new carrier)
     clearHoldCinematic();      // drop any lingering spotlight/ring
     PX.exitFrontCourt();       // the kick-off is at the center of the pool -> show the full court again
@@ -11220,15 +11240,11 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       // the white player TURNS toward the blue defender so the blue hand can also touch the ball
       atk.dataset.pose='v'; atk.dataset.rot=faceTo(+atk.dataset.x,+atk.dataset.y, +def.dataset.x,+def.dataset.y);
       if(typeof place==='function') place(atk);
-      if(typeof ballCarrier!=='undefined') ballCarrier=atk;                 // back in possession
+      if(typeof ballCarrier!=='undefined') ballCarrier=atk;                 // stays in possession — play goes on
       if(typeof moveBallTo==='function') moveBallTo(atk,'right');           // ball in the RIGHT hand
       const ax=+atk.dataset.x, ay=+atk.dataset.y;
-      if(typeof PX.whistle==='function') PX.whistle();
-      spotlightCircle(ax, ay, 2.3, false);                                 // highlight the hands-on-ball situation
-      PX.flash('BALL PUSHED UNDER','whistle');                             // each headline shows a full 2s (flash queue)
-      PX.flash('ORDINARY FOUL → CHANGE OF POSSESSION','');
-      PX.flash('Referee: the ball stayed visible —\nPLAY ON','good');
-      setTimeout(res, 6300);   // keep the scene until all three headlines have each held ~2s
+      spotlightCircle(ax, ay, 2.3, false);                                 // highlight the hands-on-ball situation — NO whistle, NO headlines
+      setTimeout(res, 1400);
     });
   }
   // 2A.4 — the carrier releases the ball (ball off the hand, toward +x / own goal).
@@ -11326,7 +11342,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     steps.push(watch('An important principle: a player who is holding the ball can be challenged much more physically. Strong contact on the ball carrier is allowed.',
       ()=>{ PX._leadFlash('STRONG CONTACT ON THE BALL CARRIER IS ALLOWED',''); carrierPressureDemo(); const a=PX._pressAtk||currentWhiteShooter(); if(a) setTimeout(()=>spotlightCircle(+a.dataset.x,+a.dataset.y,2.6,false), 2100); }));
     // 2A.3 holding a player who is NOT holding the ball = foul / exclusion (18s)
-    steps.push(watch('Holding, sinking or pulling back a player who is NOT holding the ball is a foul — and it can be committed by a defender OR an attacker. Whether it is judged an ordinary foul or an exclusion depends on the situation, the intensity, and how rough the action is (an exclusion means the player leaves the field of play for 18 seconds — more on exclusions later).',
+    steps.push(watch('Holding, sinking or pulling back a player who is NOT in possession of the ball is a foul — and it can be committed by a defender OR an attacker. Whether it is judged an ordinary foul or an exclusion depends on the situation, the intensity, and how rough the action is (an exclusion means the player leaves the field of play for 18 seconds — more on exclusions later).',
       ()=>{ const bn=document.getElementById('tutorialBanner'); if(bn){ clearTimeout(PX._bannerT); bn.style.opacity='0'; }   // instruction appears only after the spotlight + WHISTLE
              holdZone5Demo(); }));
     // 2A.4 YOU TRY — is the player still in possession? (release animation; just the question)
@@ -11342,14 +11358,16 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       },
       validate:{ type:'custom', fn:()=> PX._bnbDone===true }
     });
-    // 2A.5 rough / illegal play
-    steps.push(watch('Unnecessarily rough or illegal play can be punished with an ordinary foul or an exclusion — we will explain exclusions in more detail later.',
-      ()=>{ clearHoldCinematic(); if(typeof PX.whistle==='function') PX.whistle(); PX._leadFlash('ORDINARY FOUL / EXCLUSION',''); }));
-    // 2A.6 the ball-under-water rule — played out (needs Got it)
-    steps.push(animatedWatch('The ball-under-water rule: a defender may push down on the hand of the player holding the ball to force the ball under the surface. If the ball goes under while a player holds it, it is an ordinary foul and possession changes to the other team.',
+    // 2A.5 rough / illegal play — how fouls are signalled with the whistle
+    steps.push(watch('Unnecessarily rough or illegal play can be punished with an ordinary foul or an exclusion (explained in more detail later). An ordinary foul is usually signalled by a single whistle blow; an exclusion by a combination of two or three stronger whistles.',
+      ()=>{ clearHoldCinematic();
+        if(typeof PX.whistle==='function'){ PX.whistle(); setTimeout(()=>PX.whistle(),1500); setTimeout(()=>PX.whistle(),1750); setTimeout(()=>PX.whistle(),2000); }   // one blow, then a 2–3 blow combination
+      }));
+    // 2A.6 the ball-under-water rule — quiet demo, explained in the instruction box
+    steps.push(animatedWatch('A player in possession must be careful NOT to push the ball under the surface when an opponent is pressing close, like in this situation. Taking the ball under while holding it is an ordinary foul, and possession changes to the other team.',
       function(){ return ballUnderDemo(); }));
-    steps.push(watch('One exception: if the goalkeeper takes the ball under inside their own 6-meter zone, it is a penalty throw for the other team — we will explain penalties in more detail later.',
-      ()=>{ if(typeof PX.whistle==='function') PX.whistle(); PX._leadFlash('GK BALL UNDER IN 6m → PENALTY',''); }));
+    steps.push(watch('One exception: if the goalkeeper takes the ball under inside their own 6-metre zone, it is a penalty throw for the other team — we will explain penalties in more detail later.',
+      ()=>{ /* no whistle, no headline — just the explanation */ }));
 
     // ---- BACK TO LESSON 2 — SCORING ----
     steps.push(watch('The attacker moves toward the center to open a shot. A defender may hold ONE arm up to block the shot — but never both arms at the same time.',
