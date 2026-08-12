@@ -10465,15 +10465,15 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     return { setPhase, els };
   })();
 
-  // Blink the field-marking line(s) of a given colour (red / yellow / green /
+  // Blink the field-marking line(s) of a given color (red / yellow / green /
   // white) to draw attention while that marking is being explained. The lines
   // live in the dashed group of #fieldSvg and have no ids, so we match by stroke.
   const LINE_STROKES = { red:['#ff1a1a','#e53935'], yellow:['#ffe100','#ffd400'], green:['#145a32'], white:['white','#ffffff'] };
   PX.stopLineBlink = function(){ qa('#fieldSvg .pxBlink').forEach(p=>p.classList.remove('pxBlink')); };
-  PX.blinkLines = function(colour){
+  PX.blinkLines = function(color){
     PX.stopLineBlink();
     const g = PX.field.els().lines; if(!g) return;
-    const want = (LINE_STROKES[colour]||[]).map(s=>s.toLowerCase());
+    const want = (LINE_STROKES[color]||[]).map(s=>s.toLowerCase());
     Array.prototype.slice.call(g.querySelectorAll('path')).forEach(p=>{ const st=(p.getAttribute('stroke')||'').toLowerCase(); if(want.indexOf(st)>=0) p.classList.add('pxBlink'); });
   };
 
@@ -10535,7 +10535,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   PX.swimSubsOut = function(team){
     const pre = team==='white' ? 'W' : 'B';
     const corner = PX.reEntryCorner(team);
-    const dir = team==='white' ? -1 : 1;                                 // fan back toward the centre so they don't stack
+    const dir = team==='white' ? -1 : 1;                                 // fan back toward the center so they don't stack
     const subs = qa('.player').filter(p=>{ const l=p.dataset.label||'';
       if(l===pre+'GB') return true; const m=l.match(new RegExp('^'+pre+'(\\d+)$')); return !!(m && (+m[1])>=7); });
     return Promise.all(subs.map((p,i)=>{
@@ -10616,7 +10616,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   };
   // Reposition for the blue-defensive set-up (left goal): R1 between red & yellow
   // (2m line, x=4); R2 between yellow & green (6m line, x=8).
-  // Referees stay with the play: R1 sits on the 2-metre line of the goal being
+  // Referees stay with the play: R1 sits on the 2-meter line of the goal being
   // ATTACKED; R2 stays in line with the ball. When possession flips, the
   // attacked goal flips too, so R1 swaps ends — the roles follow the ball.
   PX.updateReferees = function(){
@@ -10811,7 +10811,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   PX.setupOffense = async function(){
     // Blend in the field zones they are swimming to, THEN swim (each ~5s).
     if(typeof selectFieldZoneSet==='function'){
-      selectFieldZoneSet('offense');
+      selectFieldZoneSet('offense'); PX._zonesActive=true;
       const zsvg=document.getElementById('fieldZonesSvg');
       if(zsvg){ zsvg.style.transition='opacity 1s ease'; zsvg.style.opacity='0'; requestAnimationFrame(()=>requestAnimationFrame(()=>{ zsvg.style.opacity='1'; })); }
     }
@@ -10904,7 +10904,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     const anims=[];
     [['white', WHITE_GOAL], ['blue', BLUE_GOAL]].forEach(function(cfg){
       const team=cfg[0], ownGoal=cfg[1], pre=team==='white'?'W':'B';
-      const fields=(team==='white'?whiteFields():blueFields()).filter(p=>p.dataset.label!==pre+'6' && !(typeof ballCarrier!=='undefined' && p===ballCarrier));   // never sub out the centre or the ball carrier
+      const fields=(team==='white'?whiteFields():blueFields()).filter(p=>p.dataset.label!==pre+'6' && !(typeof ballCarrier!=='undefined' && p===ballCarrier));   // never sub out the center or the ball carrier
       const leaving=fields[0]; if(!leaving) return;
       const corner=PX.reEntryCorner(team);                         // upper-side re-entry area near own goal
       const spot={ x:+leaving.dataset.x, y:+leaving.dataset.y };
@@ -10974,13 +10974,13 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       ()=>{ PX.field.setPhase('outline'); }));
 
     // 1.5 Building the field — reveal the markings, then explain each one (it blinks)
-    steps.push(watch('These markings are not real lines painted in the water. They are shown by cones, or by coloured areas on the lane ropes and the deck sections that surround the field of play.',
+    steps.push(watch('These markings are not real lines painted in the water. They are shown by cones, or by colored areas on the lane ropes and the deck sections that surround the field of play.',
       ()=>{ PX.field.setPhase('lines'); PX.stopLineBlink(); }));
-    steps.push(watch('The red line marks a 2-metre box in front of each goal. It is used for the offside rule — we’ll explain offside later.',
+    steps.push(watch('The red line marks a 2-meter box in front of each goal. It is used for the offside rule — we’ll explain offside later.',
       ()=>{ PX.field.setPhase('lines'); PX.blinkLines('red'); }));
-    steps.push(watch('The yellow line is the 5-metre line. It sets the distance for a penalty shot.',
+    steps.push(watch('The yellow line is the 5-meter line. It sets the distance for a penalty shot.',
       ()=>{ PX.field.setPhase('lines'); PX.blinkLines('yellow'); }));
-    steps.push(watch('The green line is the 6-metre line. From here — or nearer — a player may shoot straight at the goal right after receiving a free throw.',
+    steps.push(watch('The green line is the 6-meter line. After receiving a free throw AT the 6-meter line or farther out, a player may shoot directly at the goal. Closer in — inside the 6-meter zone — the ball must first be brought back into play (tossed slightly up or passed to a team-mate) before a shot is allowed.',
       ()=>{ PX.field.setPhase('lines'); PX.blinkLines('green'); }));
     steps.push(watch('And the white line down the middle separates the two halves of the field.',
       ()=>{ PX.field.setPhase('lines'); PX.blinkLines('white'); }));
@@ -10998,12 +10998,12 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       function(){ PX.showReferees(); PX.refereeIntro(); }));
 
     // 1.8b Ready to start
-    steps.push(watch('Each period starts with the teams at opposite ends of the pool, and the ball in the center. In pools without a centre ball ring, the referee tosses the ball in from one side instead.',
+    steps.push(watch('Each period starts with the teams at opposite ends of the pool, and the ball in the center. In pools without a center ball ring, the referee tosses the ball in from one side instead.',
       ()=>{ PX.clearRefIntro(); PX.centerBall(); PX.startRefTracking(); }));   // referees now follow the play (R1 on the 2m line, R2 with the ball)
 
     // 1.9a YOU TRY — swim-off: tap & drag the White center player up to the 5m line
     const step19a = {
-      instruction:'The swim-off! Drag the highlighted White player forward onto the ghost at the 5-metre line — or move it with the direction pad.',
+      instruction:'The swim-off! Drag the highlighted White player forward onto the ghost at the 5-meter line — or move it with the direction pad.',
       bannerSide:'top', skipDimPhase:true, highlight:null,   // no engine ring — one spotlight circle only
       // exempt the draggable White player AND the direction pad from the interaction lock (drag OR D-pad move)
       allowedSelectors: function(){ const w=whiteCenter(); return w ? ['.player[data-label="'+w.dataset.label+'"]', '#directionPad'] : ['#directionPad']; },
@@ -11042,7 +11042,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
 
     // 1.11 YOU TRY — tap the Blue goalkeeper (the defending keeper, two-hand privilege)
     steps.push({
-      instruction:'Only one member per team may touch the ball with two hands, and only inside their own 6-metre area — the area marked by the green line. Do you know who that is? Tap on them.',
+      instruction:'Only one member per team may touch the ball with two hands, and only inside their own 6-meter area — the area marked by the green line. Do you know who that is? Tap on them.',
       bannerSide:'top', skipDimPhase:true,   // no heavy dim — keep the goal, goalkeeper AND the attacker with the ball clearly visible
       highlight: ()=> { const g=blueGoalie(); return g ? ('.player[data-label="'+g.dataset.label+'"]') : '.player[data-team="goalie"]'; },
       onEnter:function(){ PX._gkTapped=false; clearHoldCinematic(); PX.blendOutZones();   // blend the orientation zones out now
@@ -11085,7 +11085,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       shootAngle: (typeof shootingAngleActive!=='undefined')?!!shootingAngleActive:false,
       refsHTML: (function(){ const L=document.getElementById('pxRefLayer'); return L?L.innerHTML:''; })(),
       refTrack: !!PX._refTrack,
-      zoneOp: (function(){ const z=document.getElementById('fieldZonesSvg'); return z?(z.style.opacity===''?'1':z.style.opacity):'0'; })()
+      zones: !!PX._zonesActive
     };
   };
   PX._restoreScene = function(snap){
@@ -11096,8 +11096,9 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     try{ if(snap.fc) PX.enterFrontCourt(); else PX.exitFrontCourt(); }catch(e){}
     try{ setShootingAngle(!!snap.shootAngle); }catch(e){}
     // zones (best effort — the only set ever used is "offense")
-    try{ if(parseFloat(snap.zoneOp)>0.02){ if(typeof selectFieldZoneSet==='function') selectFieldZoneSet('offense'); PX.reverseZoneNumbers(); const z=document.getElementById('fieldZonesSvg'); if(z) z.style.opacity=snap.zoneOp; }
-         else { if(typeof selectFieldZoneSet==='function') selectFieldZoneSet('none'); } }catch(e){}
+    try{ const z=document.getElementById('fieldZonesSvg');
+         if(snap.zones){ PX._zonesActive=true; if(typeof selectFieldZoneSet==='function') selectFieldZoneSet('offense'); PX.reverseZoneNumbers(); if(z){ z.style.transition='none'; z.style.opacity='1'; } }
+         else { PX._zonesActive=false; if(typeof selectFieldZoneSet==='function') selectFieldZoneSet('none'); if(z){ z.style.transition='none'; z.style.opacity='0'; } } }catch(e){}
     // rebuild players exactly
     try{ qa('.player').forEach(p=>p.remove()); if(typeof ballCarrier!=='undefined') ballCarrier=null; }catch(e){}
     const byLabel={};
@@ -11113,6 +11114,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
      ===================================================================== */
   // Fade the Field-Zone overlay out and switch it off.
   PX.blendOutZones = function(){
+    PX._zonesActive=false;
     const zsvg=document.getElementById('fieldZonesSvg');
     if(zsvg){ zsvg.style.transition='opacity .9s ease'; zsvg.style.opacity='0'; }
     setTimeout(()=>{ if(typeof selectFieldZoneSet==='function') selectFieldZoneSet('none'); if(zsvg) zsvg.style.opacity=''; }, 950);
@@ -11120,7 +11122,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   // Reverse the perimeter numbering so the defending goalie (in the LEFT goal,
   // facing the field) sees zone 1 on his RIGHT (bottom of screen) and zone 5 on
   // his LEFT (top). The engine draws z1 at the top / z5 at the bottom, so we
-  // renumber via customLabels: z1→5, z2→4, z3→3, z4→2, z5→1 (centre stays 6).
+  // renumber via customLabels: z1→5, z2→4, z3→3, z4→2, z5→1 (center stays 6).
   PX.reverseZoneNumbers = function(){
     try{
       if(typeof MIZE==='undefined' || !MIZE.State || !MIZE.State.fieldZones) return;
@@ -11519,7 +11521,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     const R=45;                          // ball radius in px (ball is 90px)
     const lineXpx=lineX*D;               // goal line, in px
     const gap=6;                         // ghost sits this close to the line without touching
-    const ghostCx=lineXpx - R - gap;     // ghost centre so the WHOLE ball is just inside the goal
+    const ghostCx=lineXpx - R - gap;     // ghost center so the WHOLE ball is just inside the goal
     const ghostCy=D/2;
     wrap.innerHTML='<svg viewBox="0 0 100 100" width="100%" height="100%" style="position:absolute;inset:0;pointer-events:none;">'
       +'<rect x="0" y="0" width="'+lx+'" height="100" fill="rgba(255,255,255,.10)"/>'+net
@@ -11545,7 +11547,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     let dragging=false, done=false;
     const TWO_R=2*R;
     function local(e){ const r=wrap.getBoundingClientRect(); return { x:e.clientX-r.left, y:e.clientY-r.top }; }
-    // Area-overlap fraction of two equal circles (radius R) whose centres are d apart.
+    // Area-overlap fraction of two equal circles (radius R) whose centers are d apart.
     function coverFrac(d){ if(d<=0) return 1; if(d>=TWO_R) return 0; const x=d/TWO_R; return (2/Math.PI)*(Math.acos(x) - x*Math.sqrt(1-x*x)); }
     function finish(){ if(done) return; done=true; dragging=false;
       ball.style.transition='left .18s ease, top .18s ease'; ball.style.left=ghostCx+'px'; ball.style.top=ghostCy+'px';
@@ -11636,11 +11638,11 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     steps.push(animatedWatch('A player in possession must be careful NOT to push the ball under the surface when an opponent is coming close, like in this situation …',
       function(){ return ballUnderDemo(); }));
     steps.push(watch('… taking the ball under while holding it is an ordinary foul, and possession would change to the other team.'));
-    steps.push(watch('One exception: if the goalkeeper takes the ball under inside their own 6-metre zone, it is a penalty throw for the other team — we will explain penalties in more detail later.',
+    steps.push(watch('One exception: if the goalkeeper takes the ball under inside their own 6-meter zone, it is a penalty throw for the other team — we will explain penalties in more detail later.',
       ()=>{ /* no whistle, no headline — just the explanation */ }));
 
     // ---- BACK TO LESSON 2 — SCORING ----
-    steps.push(watch('To improve the shooting position, the attacker moves into a central position. The defender may hold ONE arm up to block the shot — but never both.',
+    steps.push(watch('To improve the shooting position, the attacker moves into a central position. The defender may hold ONE arm up to block the shot — but never both: raising both arms to block leads to an exclusion.',
       ()=>{ setShooter(); setShootingAngle(false); setTimeout(()=>{ const s=PX._shooter; if(s) spotlightCircle(+s.dataset.x,+s.dataset.y,2.8,false); }, 1100); }));
 
     // 2.5 / 2.6 — SHOOT (live). Retry until a goal so the story continues.
@@ -11668,7 +11670,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     // 2.8 After the goal — the full-court kick-off is set up on enter (both teams
     // in their own half, ball waiting in the middle). Confirming moves on to the
     // substitution (next step).
-    steps.push(watch('After a goal, both teams move back into their own half for the kick-off, and the ball waits in the middle. The kick-off can start anywhere in the half of the team that has the ball. Blue was scored on, so Blue now has possession — and the referees swap responsibilities.',
+    steps.push(watch('After a goal, both teams move back into their own half for the kick-off. It can be taken anywhere in the half of the team that has the ball, but it traditionally starts from the middle of the field. Blue was scored on, so Blue now has possession — and the referees swap responsibilities.',
       function(){ restartToBlue(); PX.startRefTracking(); PX.updateReferees(); }));
 
     // 2.8b Substitution — now the teams are set up in full court, so the swim-out /
@@ -11892,7 +11894,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     document.body.classList.add('guestExperienceActive');   // lock-down CSS only (no coach exit wiring)
     PX.exitFrontCourt();   // always start in full court (swim-off uses the whole pool)
     PX.field.setPhase('water');
-    PX._swimDone=false; PX._setupDone=false; PX._gkTapped=false;
+    PX._swimDone=false; PX._setupDone=false; PX._gkTapped=false; PX._zonesActive=false; PX._snapshots={};
     const l1=PX.buildLesson1Steps(), l2=PX.buildLesson2Steps();
     PX._lessonStarts=[0, l1.length];   // Lesson 2 begins right after Lesson 1
     const allSteps = wrapBannerReset([].concat(l1, l2));
