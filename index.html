@@ -11097,22 +11097,41 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   // Clear, persistent tappable targets over BOTH goals (touch-robust) so the
   // "which goal is Blue attacking?" step always has something to tap.
   function clearGoalTapTargets(){ qa('[data-px="goaltap"]').forEach(e=>e.remove()); }
-  // Two big, unmissable FIXED tappable zones over the left/right ends of the
-  // board (z-index above everything), so this step can always be completed.
+  // A RED frame drawn EXACTLY around the White team's goal (the goal Blue
+  // attacks) is the tap target. The frame is located from the goal's own
+  // rendered SVG posts (goalFrameR1/R2), so it lines up with the goal on every
+  // screen size — the previous fixed-percentage strip could sit off to one
+  // side. A transparent catcher over the Blue (left) end gives a gentle hint on
+  // a wrong tap.
   function showGoalTapTargets(onCorrect){
-    clearGoalTapTargets(); const bd=boardEl(); if(!bd) return; const r=bd.getBoundingClientRect();
-    const W=r.width*0.22;   // narrow strips at each GOAL end only — nothing near the middle line
-    [['left', r.left, false],['right', r.left+r.width-W, true]].forEach(function(g){
-      const correct=g[2];
-      const t=make('div','pxGoalTap'); t.dataset.px='goaltap';
-      t.style.cssText='position:fixed;top:'+r.top+'px;height:'+r.height+'px;width:'+W+'px;left:'+g[1]+'px;z-index:10000;'
-        +'display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;pointer-events:auto;border:none;background:transparent;';   // no border/box -> no stray dotted lines
-      if(correct){ const lab=make('div'); lab.textContent='TAP THIS GOAL'; lab.style.cssText='font:800 14px system-ui;color:#fff;background:#1565c0;padding:8px 12px;border-radius:10px;box-shadow:0 3px 10px rgba(0,0,0,.35);pointer-events:none;'; t.appendChild(lab); }
-      const handle=function(ev){ if(ev){ ev.preventDefault(); ev.stopPropagation(); } if(correct){ clearGoalTapTargets(); if(onCorrect) onCorrect(); } else { PX.flash('That’s the goal Blue defends — try the other end',''); } };
-      t.addEventListener('pointerup', handle); t.addEventListener('click', handle);
-      document.body.appendChild(t);
-    });
-    pulseGoal('right', '#1565c0', 3600);   // glow the goal Blue attacks
+    clearGoalTapTargets(); const bd=boardEl(); if(!bd) return; const br=bd.getBoundingClientRect();
+    // Exact screen rect of the white goal MOUTH: between the two right posts.
+    let gx0, gy0, gw, gh;
+    const fr1=document.getElementById('goalFrameR1'), fr2=document.getElementById('goalFrameR2');
+    if(fr1 && fr2){
+      const a=fr1.getBoundingClientRect(), b=fr2.getBoundingClientRect();   // top post, bottom post (full court)
+      const left=Math.min(a.left,b.left), right=Math.max(a.right,b.right);
+      const top=Math.min(a.bottom,b.bottom), bottom=Math.max(a.top,b.top);   // the gap between the posts = the mouth
+      const pad=8;
+      gx0=left-pad; gy0=top-pad; gw=(right-left)+pad*2; gh=(bottom-top)+pad*2;
+    } else {   // fallback: right-end strip
+      gw=br.width*0.2; gh=br.height*0.34; gx0=br.left+br.width-gw; gy0=br.top+br.height/2-gh/2;
+    }
+    const box=make('div','pxGoalTap'); box.dataset.px='goaltap';
+    box.style.cssText='position:fixed;left:'+gx0+'px;top:'+gy0+'px;width:'+gw+'px;height:'+gh+'px;z-index:10000;box-sizing:border-box;'
+      +'border:4px solid #e8362a;border-radius:8px;background:rgba(232,54,42,.12);box-shadow:0 0 0 3px rgba(232,54,42,.25);'
+      +'cursor:pointer;touch-action:manipulation;pointer-events:auto;animation:pxGoalPulse 1.2s ease-in-out infinite;';
+    const lab=make('div'); lab.textContent='TAP THIS GOAL'; lab.style.cssText='position:absolute;left:50%;top:-34px;transform:translateX(-50%);white-space:nowrap;font:800 13px system-ui;color:#fff;background:#e8362a;padding:6px 10px;border-radius:9px;box-shadow:0 3px 10px rgba(0,0,0,.35);pointer-events:none;';
+    box.appendChild(lab);
+    const okHandle=function(ev){ if(ev){ ev.preventDefault(); ev.stopPropagation(); } clearGoalTapTargets(); if(onCorrect) onCorrect(); };
+    box.addEventListener('pointerup', okHandle); box.addEventListener('click', okHandle);
+    document.body.appendChild(box);
+    // transparent wrong-tap catcher over the Blue (left) goal end
+    const wrong=make('div','pxGoalTapWrong'); wrong.dataset.px='goaltap';
+    wrong.style.cssText='position:fixed;top:'+br.top+'px;height:'+br.height+'px;width:'+(br.width*0.2)+'px;left:'+br.left+'px;z-index:9999;background:transparent;cursor:pointer;touch-action:manipulation;pointer-events:auto;';
+    const wrongHandle=function(ev){ if(ev){ ev.preventDefault(); ev.stopPropagation(); } PX.flash('That’s the goal Blue defends — tap the other goal',''); };
+    wrong.addEventListener('pointerup', wrongHandle); wrong.addEventListener('click', wrongHandle);
+    document.body.appendChild(wrong);
   }
   function passBallTo(toEl, ms){
     return new Promise(res=>{
@@ -11583,7 +11602,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
 
     // 2.8b Substitution — now the teams are set up in full court, so the swim-out /
     // swim-in is clearly visible.
-    steps.push(animatedWatch('Teams can substitute during the match. Watch: a field player swims out at the re-entry corner next to their own goal, and a fresh team-mate (not the goalkeeper) swims in to take their place.',
+    steps.push(animatedWatch('Teams can substitute players during the match. Substitutions usually happen after a goal is scored or conceded, but teams can also make “flying” substitutions during the running game, following certain guidelines.',
       function(){ return PX.substitutionDemo(); }));
 
     // 2.9 YOU TRY — which goal is Blue attacking? (clear tappable targets on both goals)
@@ -11598,9 +11617,11 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     steps.push(animatedWatch('Now Blue attacks the white goal. The teams set up in the other half — Blue in attack, White defending each zone.',
       function(){ PX.exitFrontCourt(); return PX.setupWhiteHalf(); }));
 
-    // 2.10 The game clock
-    steps.push(watch('A water polo game is divided into four periods.',
+    // 2.10 The game clock — periods, breaks between them, and time-outs
+    steps.push(watch('A water polo game is divided into four periods, also called quarters. Their length can differ depending on the competition, but a period is usually 8 minutes long — and for younger age groups it is sometimes shorter.',
       ()=>{ PX.flash('FOUR PERIODS','',1800); }));
+    steps.push(watch('The short breaks between periods are used for recovery and for tactical adjustments by the coaches. Between quarters the teams stay on the same half; only at the longer half-time break do the teams switch sides.'));
+    steps.push(watch('While their team is in possession, a coach can call a time-out to make tactical adjustments or to substitute players. The number and length of time-outs can also differ between competitions.'));
 
     // 2.11 Follow the referees — keep them tracking (positions follow possession)
     steps.push(watch('The referees move with the play — one focuses on the action near the goal, the other on the perimeter and developing play. Their roles switch each time possession changes.',
@@ -11654,6 +11675,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       + ' body.pxParentMode .fieldZoneLabelName{ display:none !important; }'   // field zones show NUMBERS only for parents
       + ' body.pxParentMode #tutorialInstruction{ white-space:pre-line; }'   // allow line breaks / bullet lists in the instruction box
       + ' body.pxParentMode .tutorialArrowEl{ display:none !important; }'   // parents get highlight rings only — never the engine pointer arrow (referee arrows are separate)
+      + ' @keyframes pxGoalPulse{ 0%,100%{ box-shadow:0 0 0 3px rgba(232,54,42,.25); } 50%{ box-shadow:0 0 0 8px rgba(232,54,42,.12); } }'   // red frame around the white goal (tap-the-goal step)
       // Block/deactivate every app control that is not part of a tutorial step.
       + ' body.pxParentMode #controlsPanel, body.pxParentMode #quickCommandBar, body.pxParentMode #edgeTabStack, body.pxParentMode #playerActionBar, body.pxParentMode #timelineCommandsBar, body.pxParentMode #presentationPlaybackBar, body.pxParentMode #ballOwnerStatus, body.pxParentMode #autosaveStatus, body.pxParentMode #shotClockLeft, body.pxParentMode #shotClockRight, body.pxParentMode #studioFrameDots, body.pxParentMode h1{ display:none !important; }';
     document.head.appendChild(s);
