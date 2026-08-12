@@ -11031,6 +11031,20 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     if(zsvg){ zsvg.style.transition='opacity .9s ease'; zsvg.style.opacity='0'; }
     setTimeout(()=>{ if(typeof selectFieldZoneSet==='function') selectFieldZoneSet('none'); if(zsvg) zsvg.style.opacity=''; }, 950);
   };
+  // Reverse the perimeter numbering so the defending goalie (in the LEFT goal,
+  // facing the field) sees zone 1 on his RIGHT (bottom of screen) and zone 5 on
+  // his LEFT (top). The engine draws z1 at the top / z5 at the bottom, so we
+  // renumber via customLabels: z1→5, z2→4, z3→3, z4→2, z5→1 (centre stays 6).
+  PX.reverseZoneNumbers = function(){
+    try{
+      if(typeof MIZE==='undefined' || !MIZE.State || !MIZE.State.fieldZones) return;
+      MIZE.State.fieldZones.customLabels = MIZE.State.fieldZones.customLabels || {};
+      const map = { z1:{number:5}, z2:{number:4}, z3:{number:3}, z4:{number:2}, z5:{number:1} };
+      MIZE.State.fieldZones.customLabels.offense = map;
+      MIZE.State.fieldZones.customLabels.defense = map;
+      if(typeof renderFieldZones==='function') renderFieldZones();
+    }catch(e){}
+  };
   // Switch the app to Front Court view (crops/zooms to the attacking half) —
   // used once the teams are set up so the offense fills the phone screen.
   PX.enterFrontCourt = function(){ try{
@@ -11187,11 +11201,11 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     const bgk=blueGoalie(), wgk=whiteGoalie();
     if(bgk) setPlayer(bgk, BLUE_GOAL.x+0.6, CY, 'v', 90);
     if(wgk) setPlayer(wgk, WHITE_GOAL.x-1, CY, 'v', 270);
-    // Ball with the kicker, then passed back to the blue player behind him
+    // Ball waits in the MIDDLE with the kicker (blues[0]) — the kick-off is NOT
+    // played yet, so the substitution can happen with the ball sitting at center.
+    // (The kicker holds the ball, so the substitution never subs HIM out.)
     if(typeof ball!=='undefined' && ball){ ball.dataset.x=MID_X; ball.dataset.y=CY; if(typeof placeBall==='function') placeBall(); }
     if(kicker && typeof moveBallTo==='function') moveBallTo(kicker,'right');
-    const behind = blues.slice(1).sort((a,b)=>Math.abs((+a.dataset.y)-CY)-Math.abs((+b.dataset.y)-CY))[0];
-    setTimeout(()=>{ if(behind) passBallTo(behind, 600); }, 1000);
     PX.flash('KICK-OFF — BLUE','');
   }
 
@@ -11660,6 +11674,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       if(typeof waitForIntroAnimation==='function') await waitForIntroAnimation();
       injectBannerCss(); document.body.classList.add('pxParentMode');
       if(typeof isTouchDevice==='function' && isTouchDevice()) document.body.classList.add('pxTouch');   // phone/tablet layout: banner top-left
+      PX.reverseZoneNumbers();   // perimeter 1–5 so the defending goalie has zone 1 on his RIGHT, zone 5 on his LEFT
       PX.field.setPhase('water');           // keep the field hidden behind the start screen
       PX.showStartScreen(beginLessons);     // stays until the parent clicks "Get started!"
     }catch(err){ console.error('Parent Experience failed to start:', err); }
