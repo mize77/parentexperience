@@ -10453,6 +10453,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     }
     function op(list, v){ (Array.isArray(list)?list:[list]).forEach(e=>{ if(e){ e.style.transition='opacity .6s ease'; e.style.opacity=v; } }); }
     function setPhase(phase){
+      PX._fieldPhase = phase;
       const e=els(); if(!e.svg) return;
       const showOutline = phase!=='water';
       const showLines   = phase==='lines';
@@ -10463,6 +10464,18 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     }
     return { setPhase, els };
   })();
+
+  // Blink the field-marking line(s) of a given colour (red / yellow / green /
+  // white) to draw attention while that marking is being explained. The lines
+  // live in the dashed group of #fieldSvg and have no ids, so we match by stroke.
+  const LINE_STROKES = { red:['#ff1a1a','#e53935'], yellow:['#ffe100','#ffd400'], green:['#145a32'], white:['white','#ffffff'] };
+  PX.stopLineBlink = function(){ qa('#fieldSvg .pxBlink').forEach(p=>p.classList.remove('pxBlink')); };
+  PX.blinkLines = function(colour){
+    PX.stopLineBlink();
+    const g = PX.field.els().lines; if(!g) return;
+    const want = (LINE_STROKES[colour]||[]).map(s=>s.toLowerCase());
+    Array.prototype.slice.call(g.querySelectorAll('path')).forEach(p=>{ const st=(p.getAttribute('stroke')||'').toLowerCase(); if(want.indexOf(st)>=0) p.classList.add('pxBlink'); });
+  };
 
   /* -------------------------------------------------- spawn / place players */
   PX.clearActors = function(){ qa('.player').forEach(p=>p.remove()); if(typeof ballCarrier!=='undefined'){ try{ ballCarrier=null; }catch(e){} } };
@@ -10942,38 +10955,46 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     const steps=[];
 
     // 1.1 Welcome — only water
-    steps.push(watch('Welcome to water polo. Let’s start with the place where everything happens — the pool.',
+    steps.push(watch('Welcome to Water Polo. Let’s start with the place where everything happens — the pool.',
       ()=>{ PX.clearActors(); PX.clearReferees(); PX.field.setPhase('water'); }));
 
     // 1.1b Landscape tip — phones / tablets only: hold the device sideways
     if(pxIsTouch()) steps.push(watch('One quick tip before we begin: this tutorial works best on a phone or tablet held sideways, in landscape. Turn your device to landscape now for the clearest view of the whole pool, then tap “Got it”.'));
 
     // 1.2 Meet White — full 13-player squad in a circle on their (right) half
-    steps.push(watch('Here is the White team. A full squad has thirteen players, including TWO goalkeepers — they wear the caps numbered 1 and 13.',
+    steps.push(watch('Here is the White team. A full squad has thirteen players, including TWO goalkeepers — they wear the caps numbered 1 and 13 (in some competitions 1 and 1A).',
       ()=>{ PX.spawnCircle('white'); }));
 
     // 1.3 Meet Blue — full 13-player squad in a circle on their (left) half
-    steps.push(watch('And here is the Blue team — also thirteen players, with two goalkeepers wearing caps 1 and 13.',
+    steps.push(watch('And here is the Blue team — also thirteen players, with two goalkeepers wearing caps 1 and 13 (in some competitions 1 and 1A).',
       ()=>{ PX.spawnCircle('blue'); }));
 
     // 1.4 Two goals — outline + goals appear
     steps.push(watch('Two goals. Each team protects one goal and attacks the other.',
       ()=>{ PX.field.setPhase('outline'); }));
 
-    // 1.5 Building the field — reveal the red / yellow / green lines
-    steps.push(watch('The markings divide the pool into important playing areas — you’ll discover why they matter as we go.',
-      ()=>{ PX.field.setPhase('lines'); }));
+    // 1.5 Building the field — reveal the markings, then explain each one (it blinks)
+    steps.push(watch('These markings are not real lines painted in the water. They are shown by cones, or by coloured areas on the lane ropes and the deck sections that surround the field of play.',
+      ()=>{ PX.field.setPhase('lines'); PX.stopLineBlink(); }));
+    steps.push(watch('The red line marks a 2-metre box in front of each goal. It is used for the offside rule — we’ll explain offside later.',
+      ()=>{ PX.field.setPhase('lines'); PX.blinkLines('red'); }));
+    steps.push(watch('The yellow line is the 5-metre line. It sets the distance for a penalty shot.',
+      ()=>{ PX.field.setPhase('lines'); PX.blinkLines('yellow'); }));
+    steps.push(watch('The green line is the 6-metre line. From here — or nearer — a player may shoot straight at the goal right after receiving a free throw.',
+      ()=>{ PX.field.setPhase('lines'); PX.blinkLines('green'); }));
+    steps.push(watch('And the white line down the middle separates the two halves of the field.',
+      ()=>{ PX.field.setPhase('lines'); PX.blinkLines('white'); }));
 
     // 1.6 Substitutes swim out — leaving seven starters per team (needs Got it)
-    steps.push(animatedWatch('Only seven players per team are in the water at once: six field players and one goalkeeper. The other six are substitutes — including a backup goalkeeper (cap 13) — and they now swim out. Teams usually have six substitutes, but some competitions allow more.',
-      function(){ return Promise.all([ PX.swimSubsOut('white'), PX.swimSubsOut('blue') ]); }));
+    steps.push(animatedWatch('Only seven players per team are in the water at once: six field players and one goalkeeper. The other six are substitutes, including a backup goalkeeper (cap 13). Teams usually have six substitutes, but some competitions allow more.',
+      function(){ PX.stopLineBlink(); return Promise.all([ PX.swimSubsOut('white'), PX.swimSubsOut('blue') ]); }));
 
     // 1.7 The seven starters line up at their ends (needs Got it)
     steps.push(animatedWatch('The seven starters take their places at opposite ends of the pool, ready to begin.',
       function(){ return Promise.all([ PX.startersToLineup('white'), PX.startersToLineup('blue') ]).then(()=>{ PX.centerBall(); }); }));
 
     // 1.8 Referees — white circles R1/R2, spotlight then red-circle arrows; "Got it" to advance
-    steps.push(watch('A water polo game can be officiated by one or two referees — R1 and R2 — who observe the game and enforce the rules. They stay with the play throughout the match.',
+    steps.push(watch('A Water Polo game can be officiated by one or two referees — R1 and R2 — who observe the game and enforce the rules. They stay with the play throughout the match.',
       function(){ PX.showReferees(); PX.refereeIntro(); }));
 
     // 1.8b Ready to start
@@ -10997,12 +11018,12 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     };
     steps.push(step19a);
 
-    // 1.9b Swim-off completes -> everyone follows, White wins the ball, back-pass (needs Got it)
-    steps.push(animatedWatch('The race for possession at the start of a period is called the swim-off.',
+    // 1.9b Swim-off completes -> confirm first, THEN everyone races and White wins the ball
+    steps.push(ackThenAnimate('The race for possession at the start of a period is called the swim-off.',
       function(){ clearHoldCinematic(); return runSwimOff(); }));
 
-    // 1.10 Teams set up — offense perimeter at the blue goal (needs Got it)
-    steps.push(animatedWatch('White has the ball and attacks the Blue goal. The teams set up: White in attack, Blue defending each zone.',
+    // 1.10 Teams set up — confirm first, THEN they swim into their positions
+    steps.push(ackThenAnimate('White is in attack. The Blue players organize their defense — usually each one finds an opponent to focus on.',
       function(){ return PX.setupOffense().then(()=>{ PX.flash('OFFENSE SET UP','good'); }); }));
 
     // 1.10a Landscape swipe tip — phones / tablets only: how to see the whole action
@@ -11016,12 +11037,12 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     });
 
     // 1.10b Brief note on the zones (numbers only) — then they blend out at the next step
-    steps.push(watch('The numbered field zones are just orientation areas that help the players spread out — they are NOT official field markings. Coaches use different numbers or names for them; here we use the common 1–6 pattern.',
+    steps.push(watch('The numbered field zones are just orientation areas that help the players spread out — they are NOT official field markings. Coaches use different numbers or names for them; here we use the common zones — also called positions — numbered 1 to 6.',
       ()=>{ /* zones from setup stay visible for this note; only their numbers show */ }));
 
     // 1.11 YOU TRY — tap the Blue goalkeeper (the defending keeper, two-hand privilege)
     steps.push({
-      instruction:'One player may touch the ball with two hands inside their own 6-meter area — the area marked by the green line. Tap the Blue goalkeeper.',
+      instruction:'Only one member per team may touch the ball with two hands, and only inside their own 6-metre area — the area marked by the green line. Do you know who that is? Tap on them.',
       bannerSide:'top', skipDimPhase:true,   // no heavy dim — keep the goal, goalkeeper AND the attacker with the ball clearly visible
       highlight: ()=> { const g=blueGoalie(); return g ? ('.player[data-label="'+g.dataset.label+'"]') : '.player[data-team="goalie"]'; },
       onEnter:function(){ PX._gkTapped=false; clearHoldCinematic(); PX.blendOutZones();   // blend the orientation zones out now
@@ -11044,9 +11065,48 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   // Every scene starts with the instruction box visible; a headline in the
   // scene's own onEnter then hides it and it fades back 0.5s later.
   function wrapBannerReset(steps){
-    steps.forEach(s=>{ const orig=s.onEnter; s.onEnter=function(){ const bn=document.getElementById('tutorialBanner'); if(bn) bn.style.opacity='1'; if(PX._bannerT) clearTimeout(PX._bannerT); if(typeof orig==='function') orig.call(this); }; });
+    steps.forEach(s=>{ const orig=s.onEnter; s.onEnter=function(){
+      // Snapshot the scene AS IT IS before this step's onEnter changes it — i.e.
+      // the settled end of the previous step. Keyed by the step being entered, so
+      // Previous can restore the exact pre-step scene and re-run onEnter from it.
+      try{ if(typeof tutorialStepIndex!=='undefined' && tutorialStepIndex>=0){ PX._snapshots=PX._snapshots||{}; PX._snapshots[tutorialStepIndex]=PX._captureScene(); } }catch(e){}
+      const bn=document.getElementById('tutorialBanner'); if(bn) bn.style.opacity='1'; if(PX._bannerT) clearTimeout(PX._bannerT); if(typeof orig==='function') orig.call(this); }; });
     return steps;
   }
+  // Capture / restore the full scene (players, ball, field phase, view, refs,
+  // zones) so the Previous-step button lands on the exact right positions.
+  PX._captureScene = function(){
+    return {
+      players: qa('.player').map(p=>({ label:p.dataset.label||'', team:p.dataset.team||'', x:+p.dataset.x||0, y:+p.dataset.y||0, pose:p.dataset.pose||'v', rot:+p.dataset.rot||0, cap:((p.querySelector('.capNumber')||{}).textContent)||'', block:p.dataset.blockArm||'', sel:p.classList.contains('selected') })),
+      ball: (typeof ball!=='undefined'&&ball)?{ x:+ball.dataset.x||0, y:+ball.dataset.y||0 }:null,
+      carrier: (typeof ballCarrier!=='undefined'&&ballCarrier&&ballCarrier.dataset)?ballCarrier.dataset.label:null,
+      phase: PX._fieldPhase||'lines',
+      fc: (typeof frontCourtActive!=='undefined')?!!frontCourtActive:false,
+      shootAngle: (typeof shootingAngleActive!=='undefined')?!!shootingAngleActive:false,
+      refsHTML: (function(){ const L=document.getElementById('pxRefLayer'); return L?L.innerHTML:''; })(),
+      refTrack: !!PX._refTrack,
+      zoneOp: (function(){ const z=document.getElementById('fieldZonesSvg'); return z?(z.style.opacity===''?'1':z.style.opacity):'0'; })()
+    };
+  };
+  PX._restoreScene = function(snap){
+    if(!snap) return;
+    try{ PX._cleanupStepUI(); }catch(e){}
+    try{ PX.stopLineBlink(); }catch(e){}
+    try{ PX.field.setPhase(snap.phase||'lines'); }catch(e){}
+    try{ if(snap.fc) PX.enterFrontCourt(); else PX.exitFrontCourt(); }catch(e){}
+    try{ setShootingAngle(!!snap.shootAngle); }catch(e){}
+    // zones (best effort — the only set ever used is "offense")
+    try{ if(parseFloat(snap.zoneOp)>0.02){ if(typeof selectFieldZoneSet==='function') selectFieldZoneSet('offense'); PX.reverseZoneNumbers(); const z=document.getElementById('fieldZonesSvg'); if(z) z.style.opacity=snap.zoneOp; }
+         else { if(typeof selectFieldZoneSet==='function') selectFieldZoneSet('none'); } }catch(e){}
+    // rebuild players exactly
+    try{ qa('.player').forEach(p=>p.remove()); if(typeof ballCarrier!=='undefined') ballCarrier=null; }catch(e){}
+    const byLabel={};
+    (snap.players||[]).forEach(pl=>{ try{ const e=makePlayer([pl.label, pl.team, pl.x, pl.y, pl.pose, pl.rot]); const num=e.querySelector('.capNumber'); if(num && pl.cap) num.textContent=pl.cap; if(pl.block) e.dataset.blockArm=pl.block; if(pl.sel) e.classList.add('selected'); e.style.opacity=''; byLabel[pl.label]=e; if(pl.block && typeof updatePlayerVisual==='function') updatePlayerVisual(e); }catch(e){} });
+    try{ if(snap.ball && typeof ball!=='undefined' && ball){ ball.dataset.x=snap.ball.x; ball.dataset.y=snap.ball.y; if(typeof placeBall==='function') placeBall(); } }catch(e){}
+    try{ if(snap.carrier && byLabel[snap.carrier] && typeof ballCarrier!=='undefined'){ ballCarrier=byLabel[snap.carrier]; } }catch(e){}
+    try{ const L=refLayer(); L.innerHTML=snap.refsHTML||''; if(snap.refTrack) PX.startRefTracking(); else PX.stopRefTracking(); }catch(e){}
+    try{ qa('.player').forEach(p=>{ if(typeof place==='function') place(p); }); }catch(e){}
+  };
 
   /* =====================================================================
      LESSON 2 — HOW THE GAME WORKS  (continues from Lesson 1)
@@ -11200,7 +11260,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     PX.flash('SHOOTING POSITION','');
   }
   function setShootingAngle(on){ try{ if(typeof shootingAngleActive!=='undefined'){ shootingAngleActive=!!on; if(typeof renderShootingAngle==='function') renderShootingAngle(); if(typeof _shootingAngleUI!=='undefined'&&_shootingAngleUI&&_shootingAngleUI.render) _shootingAngleUI.render(); } }catch(e){} }
-  function beginParentShot(){ setShootingAngle(true); s25Attempt(0); }   // show the attacker's shooting angle
+  function beginParentShot(){ setShootingAngle(false); s25Attempt(0); }   // no dotted shooting-angle lines (parents found them confusing)
   function s25Attempt(n){
     if(n===0){
       // First attempt: the marked spot is in the CENTER — within the keeper's
@@ -11511,8 +11571,8 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     let drivePlayer=null, driveTarget=null;
 
     // 2.1 — blend the zones out, then show which goal White attacks
-    steps.push(watch('Now the game is live. White protects the far goal — and attacks the Blue goal.',
-      ()=>{ PX.field.setPhase('lines'); PX.ensureOffenseBoard(); PX.blendOutZones(); PX.enterFrontCourt(); if(!document.getElementById('pxRefTop')) PX.showReferees(); PX.startRefTracking(); setTimeout(()=>{ pulseGoal('right','#1565c0',1500); setTimeout(()=>pulseGoal('left','#e8362a',1600), 1600); }, 800); }));
+    steps.push(watch('Now the action begins — White is in possession of the ball and on the attack.',
+      ()=>{ PX.field.setPhase('lines'); PX.ensureOffenseBoard(); PX.blendOutZones(); PX.enterFrontCourt(); if(!document.getElementById('pxRefTop')) PX.showReferees(); PX.startRefTracking(); }));
 
     // 2.2 YOU TRY — under pressure, protect the ball: tap & drag back to the ghost
     const step22 = {
@@ -11544,7 +11604,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
 
     // ---- LESSON 2A — PHYSICALITY ----
     // 2A.1 contact is allowed
-    steps.push(watch('Water polo is a physical sport. Touching and body contact between players is allowed — so this on its own is not a foul.',
+    steps.push(watch('Water Polo is a physical sport. Touching and body contact between players is allowed — so this on its own is not a foul.',
       ()=>{ PX._leadFlash('BODY CONTACT IS PART OF WATER POLO',''); }));
     // 2A.2 strong contact on the ball carrier is allowed (3s announcement + animation + spotlight)
     steps.push(watch('An important principle: a player who is holding the ball can be challenged much more physically. Strong contact on the ball carrier is allowed.',
@@ -11573,15 +11633,15 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
         if(typeof PX.whistle==='function') PX.whistle();   // a single whistle here (no confusing multi-blow demo)
       }));
     // 2A.6 the ball-under-water rule — quiet demo, explained in the instruction box
-    steps.push(animatedWatch('A player in possession must be careful NOT to push the ball under the surface when an opponent is pressing close, like in this situation …',
+    steps.push(animatedWatch('A player in possession must be careful NOT to push the ball under the surface when an opponent is coming close, like in this situation …',
       function(){ return ballUnderDemo(); }));
-    steps.push(watch('… taking the ball under while holding it is an ordinary foul, and possession changes to the other team.'));
+    steps.push(watch('… taking the ball under while holding it is an ordinary foul, and possession would change to the other team.'));
     steps.push(watch('One exception: if the goalkeeper takes the ball under inside their own 6-metre zone, it is a penalty throw for the other team — we will explain penalties in more detail later.',
       ()=>{ /* no whistle, no headline — just the explanation */ }));
 
     // ---- BACK TO LESSON 2 — SCORING ----
-    steps.push(watch('The attacker moves toward the center to open a shot, and the defender stays between him and the goal. A defender may hold ONE arm up to block the shot — but never both. The dotted lines show the shooter’s angle on the goal.',
-      ()=>{ setShooter(); setTimeout(()=>{ setShootingAngle(true); const s=PX._shooter; if(s) spotlightCircle(+s.dataset.x,+s.dataset.y,2.8,false); }, 1100); }));
+    steps.push(watch('To improve the shooting position, the attacker moves into a central position. The defender may hold ONE arm up to block the shot — but never both.',
+      ()=>{ setShooter(); setShootingAngle(false); setTimeout(()=>{ const s=PX._shooter; if(s) spotlightCircle(+s.dataset.x,+s.dataset.y,2.8,false); }, 1100); }));
 
     // 2.5 / 2.6 — SHOOT (live). Retry until a goal so the story continues.
     steps.push({
@@ -11605,9 +11665,11 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       validate:{ type:'custom', fn:()=> PX._goalDragged===true }
     });
 
-    // 2.8 After the goal — kick-off, Blue possession (only starts once the parent confirms)
-    steps.push(ackThenAnimate('After a goal, both teams move into their own half. The kick-off often starts from the middle of the pool, but it can start anywhere in the half of the team that has the ball. Blue was scored on, so Blue now has possession — and the referees swap responsibilities. Tap “Got it” to start the kick-off.',
-      function(){ restartToBlue(); return delay(1900); }));
+    // 2.8 After the goal — the full-court kick-off is set up on enter (both teams
+    // in their own half, ball waiting in the middle). Confirming moves on to the
+    // substitution (next step).
+    steps.push(watch('After a goal, both teams move back into their own half for the kick-off, and the ball waits in the middle. The kick-off can start anywhere in the half of the team that has the ball. Blue was scored on, so Blue now has possession — and the referees swap responsibilities.',
+      function(){ restartToBlue(); PX.startRefTracking(); PX.updateReferees(); }));
 
     // 2.8b Substitution — now the teams are set up in full court, so the swim-out /
     // swim-in is clearly visible.
@@ -11623,11 +11685,11 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     });
 
     // 2.9b Teams set up in the WHITE half (mirror of the earlier offense set-up) — full court
-    steps.push(animatedWatch('Now Blue attacks the white goal. The teams set up in the other half — Blue in attack, White defending each zone.',
+    steps.push(ackThenAnimate('Now Blue is in attack, and White defends to protect their goal.',
       function(){ PX.exitFrontCourt(); return PX.setupWhiteHalf(); }));
 
     // 2.10 The game clock — periods, breaks between them, and time-outs
-    steps.push(watch('A water polo game is divided into four periods, also called quarters. Their length can differ depending on the competition, but a period is usually 8 minutes long — and for younger age groups it is sometimes shorter.',
+    steps.push(watch('A Water Polo game is divided into four periods, also called quarters. Their length can differ depending on the competition, but a period is usually 8 minutes long — and for younger age groups it is sometimes shorter.',
       ()=>{ PX.flash('FOUR PERIODS','',1800); }));
     steps.push(watch('The short breaks between periods are used for recovery and for tactical adjustments by the coaches. Between quarters the teams stay on the same half; only at the longer half-time break do the teams switch sides.'));
     steps.push(watch('While their team is in possession, a coach can call a time-out to make tactical adjustments or to substitute players. The number and length of time-outs can also differ between competitions.'));
@@ -11685,6 +11747,8 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       + ' body.pxParentMode #tutorialInstruction{ white-space:pre-line; }'   // allow line breaks / bullet lists in the instruction box
       + ' body.pxParentMode .tutorialArrowEl{ display:none !important; }'   // parents get highlight rings only — never the engine pointer arrow (referee arrows are separate)
       + ' @keyframes pxGoalPulse{ 0%,100%{ box-shadow:0 0 0 3px rgba(232,54,42,.25); } 50%{ box-shadow:0 0 0 8px rgba(232,54,42,.12); } }'   // red frame around the white goal (tap-the-goal step)
+      + ' @keyframes pxLineBlink{ 0%,100%{ opacity:1; } 50%{ opacity:.1; } }'   // blink a field-marking line while it is explained
+      + ' #fieldSvg path.pxBlink{ animation:pxLineBlink .75s ease-in-out infinite; stroke-width:.16 !important; }'
       // Block/deactivate every app control that is not part of a tutorial step.
       + ' body.pxParentMode #controlsPanel, body.pxParentMode #quickCommandBar, body.pxParentMode #edgeTabStack, body.pxParentMode #playerActionBar, body.pxParentMode #timelineCommandsBar, body.pxParentMode #presentationPlaybackBar, body.pxParentMode #ballOwnerStatus, body.pxParentMode #autosaveStatus, body.pxParentMode #shotClockLeft, body.pxParentMode #shotClockRight, body.pxParentMode #studioFrameDots, body.pxParentMode h1{ display:none !important; }';
     document.head.appendChild(s);
@@ -11724,23 +11788,25 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   PX.showNav = function(){
     if(document.getElementById('pxNav')) return;
     const nav=make('div'); nav.id='pxNav';
-    nav.style.cssText='position:fixed;left:12px;bottom:12px;z-index:9400;display:flex;flex-direction:column;gap:8px;';
+    nav.style.cssText='position:fixed;left:10px;bottom:10px;z-index:9400;display:flex;flex-direction:column;gap:5px;';
+    // Compact controls (about half the previous size). Only Exit + the
+    // Previous/Next split are here; "Move to next lesson" (rarely needed) is
+    // offered inside the Exit dialog instead.
     const mk=(label,bg,fn)=>{ const b=make('button'); b.textContent=label;
-      b.style.cssText='font:700 13px system-ui;color:#fff;background:'+bg+';border:none;border-radius:10px;padding:10px 14px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.3);text-align:left;touch-action:manipulation;pointer-events:auto;';
+      b.style.cssText='font:700 11px system-ui;color:#fff;background:'+bg+';border:none;border-radius:8px;padding:5px 10px;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.28);text-align:left;touch-action:manipulation;pointer-events:auto;';
       const h=function(ev){ if(ev){ ev.preventDefault(); ev.stopPropagation(); } if(b._pxLock) return; b._pxLock=true; setTimeout(()=>{ b._pxLock=false; }, 400); if(typeof fn==='function') fn(); };
       b.addEventListener('pointerup',h); b.addEventListener('click',h); return b; };
     nav.appendChild(mk('Exit tutorial','#8a3a3a', PX.exitWp));
-    // A single split control: ◀ Previous step | Next step ▶ — jump back to
+    // A single split control: ← Previous step | Next step → — jump back to
     // re-read/redo a step, or skip forward if something did not register.
-    const row=make('div'); row.style.cssText='display:flex;border-radius:10px;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.3);';
+    const row=make('div'); row.style.cssText='display:flex;border-radius:8px;overflow:hidden;box-shadow:0 3px 10px rgba(0,0,0,.28);';
     const half=(label,fn,extra)=>{ const b=make('button'); b.textContent=label;
-      b.style.cssText='flex:1 1 0;font:700 13px system-ui;color:#fff;background:#37474f;border:none;padding:10px 14px;cursor:pointer;text-align:center;white-space:nowrap;touch-action:manipulation;pointer-events:auto;'+(extra||'');
+      b.style.cssText='flex:1 1 0;font:700 11px system-ui;color:#fff;background:#37474f;border:none;padding:5px 10px;cursor:pointer;text-align:center;white-space:nowrap;touch-action:manipulation;pointer-events:auto;'+(extra||'');
       const h=function(ev){ if(ev){ ev.preventDefault(); ev.stopPropagation(); } if(b._pxLock) return; b._pxLock=true; setTimeout(()=>{ b._pxLock=false; }, 400); if(typeof fn==='function') fn(); };
       b.addEventListener('pointerup',h); b.addEventListener('click',h); return b; };
-    row.appendChild(half('← Previous step', PX.prevStep, 'border-right:1px solid rgba(255,255,255,.28);'));
-    row.appendChild(half('Next step →', PX.skipStep));
+    row.appendChild(half('← Previous', PX.prevStep, 'border-right:1px solid rgba(255,255,255,.28);'));
+    row.appendChild(half('Next →', PX.skipStep));
     nav.appendChild(row);
-    nav.appendChild(mk('Move to next lesson →','#1a6363', PX.nextLesson));
     document.body.appendChild(nav);
   };
   // Clean up any live interaction (shoot / tap / choice / goal-zoom / follow /
@@ -11764,12 +11830,17 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     const cur=(typeof tutorialStepIndex!=='undefined')?tutorialStepIndex:0;
     if(typeof goToTutorialStep==='function') goToTutorialStep(cur+1);
   };
-  // Step back one step to re-read or redo it (its scene rebuilds from onEnter).
+  // Step back one step to re-read or redo it. Restore the exact pre-step scene
+  // (captured at that step's first entry) BEFORE the engine re-runs its onEnter,
+  // so the players rebuild from the right starting positions.
   PX.prevStep = function(){
     PX._cleanupStepUI();
     const cur=(typeof tutorialStepIndex!=='undefined')?tutorialStepIndex:0;
-    if(cur>0 && typeof goToTutorialStep==='function') goToTutorialStep(cur-1);
-    else PX.flash('You’re at the very beginning','',1400);
+    if(cur>0 && typeof goToTutorialStep==='function'){
+      const target=cur-1;
+      try{ if(PX._snapshots && PX._snapshots[target]) PX._restoreScene(PX._snapshots[target]); }catch(e){}
+      goToTutorialStep(target);
+    } else PX.flash('You’re at the very beginning','',1400);
   };
   PX.hideNav = function(){ const n=document.getElementById('pxNav'); if(n) n.remove(); };
   PX.nextLesson = function(){
@@ -11797,7 +11868,11 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     row.appendChild(restart);
     if(kind!=='complete'){ const back=make('button'); back.textContent='Keep going';
       back.style.cssText='font:800 18px system-ui;color:#0b2b2b;background:#4bb8bd;border:none;border-radius:999px;padding:14px 34px;cursor:pointer;';
-      back.addEventListener('click', ()=>{ ov.remove(); PX.showNav(); }); row.appendChild(back); }
+      back.addEventListener('click', ()=>{ ov.remove(); PX.showNav(); }); row.appendChild(back);
+      // "Move to next lesson" lives here (rarely needed) rather than cluttering the nav.
+      const nextLes=make('button'); nextLes.textContent='Move to next lesson →';
+      nextLes.style.cssText='font:800 18px system-ui;color:#fff;background:#1a6363;border:2px solid #4bb8bd;border-radius:999px;padding:14px 34px;cursor:pointer;';
+      nextLes.addEventListener('click', ()=>{ ov.remove(); PX.showNav(); PX.nextLesson(); }); row.appendChild(nextLes); }
     ov.appendChild(row);
     document.body.appendChild(ov);
   };
@@ -11808,7 +11883,10 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     PX.clearActors(); PX.clearReferees();
     PX.showStartScreen(beginLessons);   // back to "Water Polo made easy" start screen
   };
-  PX.exitWp = function(){ PX.hideNav(); PX.hideGoalZoom(); PX.exitFrontCourt(); PX.stopRefTracking(); if(typeof tutorialModeActive!=='undefined' && tutorialModeActive && typeof exitTutorial==='function') exitTutorial(); PX.showWpEnd('exit'); };
+  // "Exit tutorial" opens a small dialog (Restart / Keep going / Move to next
+  // lesson) WITHOUT tearing down the engine, so "Keep going" and "Move to next
+  // lesson" both still work. Only "Restart" actually ends the run.
+  PX.exitWp = function(){ PX.hideNav(); PX.showWpEnd('exit'); };
 
   function beginLessons(){
     document.body.classList.add('guestExperienceActive');   // lock-down CSS only (no coach exit wiring)
