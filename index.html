@@ -10398,6 +10398,9 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   // instruction box after the 2s hold — so it's headline → instruction, never
   // instruction → headline → instruction.
   PX._leadFlash = function(text, kind){ const bn=document.getElementById('tutorialBanner'); if(bn){ clearTimeout(PX._bannerT); bn.style.opacity='0'; } PX.flash(text, kind); };
+  // Drain any pending/visible headline flashes so a stale one (e.g. the shoot
+  // step's "Tap the marked spot") can never bleed into the next step.
+  PX.clearFlash = function(){ PX._flashQueue.length=0; PX._flashBusy=false; const l=document.getElementById('pxFlash'); if(l){ l.style.opacity='0'; } const bn=document.getElementById('tutorialBanner'); if(bn){ clearTimeout(PX._bannerT); PX._bannerT=setTimeout(()=>{ bn.style.opacity='1'; }, 400); } };
   function _processFlash(){
     if(!PX._flashQueue.length){ PX._flashBusy=false; const bn=document.getElementById('tutorialBanner'); if(bn){ clearTimeout(PX._bannerT); PX._bannerT=setTimeout(()=>{ bn.style.opacity='1'; }, 500); } return; }
     PX._flashBusy=true;
@@ -10996,7 +10999,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     // 1.11 YOU TRY — tap the Blue goalkeeper (the defending keeper, two-hand privilege)
     steps.push({
       instruction:'One player may touch the ball with two hands inside their own 6-meter area — the area marked by the green line. Tap the Blue goalkeeper.',
-      bannerSide:'top', skipDimPhase:false,
+      bannerSide:'top', skipDimPhase:true,   // no heavy dim — keep the goal, goalkeeper AND the attacker with the ball clearly visible
       highlight: ()=> { const g=blueGoalie(); return g ? ('.player[data-label="'+g.dataset.label+'"]') : '.player[data-team="goalie"]'; },
       onEnter:function(){ PX._gkTapped=false; clearHoldCinematic(); PX.blendOutZones();   // blend the orientation zones out now
         PX.tap.arm({
@@ -11414,14 +11417,14 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     wrap.innerHTML='<svg viewBox="0 0 100 100" width="100%" height="100%" style="position:absolute;inset:0;pointer-events:none;">'
       +'<rect x="0" y="0" width="'+lx+'" height="100" fill="rgba(255,255,255,.10)"/>'+net
       +'<text x="'+(lx*0.42)+'" y="52" text-anchor="middle" font-size="7" font-weight="800" fill="rgba(255,255,255,.75)" style="letter-spacing:.5px;">GOAL</text>'
-      +'<line x1="'+lx+'" y1="5" x2="'+lx+'" y2="95" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round">'
-        +'<animate attributeName="stroke-width" values="2.4;3.6;2.4" dur="1.3s" repeatCount="indefinite"/>'
+      +'<line x1="'+lx+'" y1="5" x2="'+lx+'" y2="95" stroke="#ffffff" stroke-width="4" stroke-linecap="round">'
+        +'<animate attributeName="stroke-width" values="4;5.4;4" dur="1.3s" repeatCount="indefinite"/>'
         +'<animate attributeName="opacity" values="1;.6;1" dur="1.3s" repeatCount="indefinite"/></line>'
-      +'<circle cx="'+gx+'" cy="50" r="9" fill="rgba(8,20,35,.5)" stroke="#ffd23f" stroke-width="2.5" stroke-dasharray="4 3"/>'
+      +'<circle cx="'+gx+'" cy="50" r="13" fill="rgba(8,20,35,.5)" stroke="#ffd23f" stroke-width="2.5" stroke-dasharray="4 3"/>'
       +'</svg>';
     const ball=make('div'); ball.id='pxZoomBall';
-    ball.style.cssText='position:absolute;width:30px;height:30px;border-radius:50%;transform:translate(-50%,-50%);cursor:grab;touch-action:none;pointer-events:auto;'
-      +'background:radial-gradient(circle at 35% 30%, #ffe680, #f2b100 62%, #c98800);box-shadow:0 3px 8px rgba(0,0,0,.45);';
+    ball.style.cssText='position:absolute;width:90px;height:90px;border-radius:50%;transform:translate(-50%,-50%);cursor:grab;touch-action:none;pointer-events:auto;'   // 3x bigger
+      +'background:radial-gradient(circle at 35% 30%, #ffe680, #f2b100 62%, #c98800);box-shadow:0 3px 10px rgba(0,0,0,.45);';
     ball.style.left=(lineX*D)+'px'; ball.style.top=(D/2)+'px';
     wrap.appendChild(ball);
     document.body.appendChild(wrap);
@@ -11533,6 +11536,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       bannerSide:'top', skipDimPhase:true, highlight:null,
       allowedSelectors:'#pxGoalZoom',   // the zoom widget stays interactive under the lock
       onEnter:function(){ PX._goalDragged=false; setShootingAngle(false);
+        PX.clearFlash();   // drop any lingering headline flash (e.g. the shoot step's "Tap the marked spot")
         showGoalZoomDrag(function(){ PX._goalDragged=true; PX.flash('GOAL!','goal'); });
       },
       validate:{ type:'custom', fn:()=> PX._goalDragged===true }
@@ -11614,6 +11618,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       + ' body.pxParentMode .rotateHandle{ display:none !important; pointer-events:none !important; }'   // parents never rotate/spin players
       + ' body.pxParentMode .fieldZoneLabelName{ display:none !important; }'   // field zones show NUMBERS only for parents
       + ' body.pxParentMode #tutorialInstruction{ white-space:pre-line; }'   // allow line breaks / bullet lists in the instruction box
+      + ' body.pxParentMode .tutorialArrowEl{ display:none !important; }'   // parents get highlight rings only — never the engine pointer arrow (referee arrows are separate)
       // Block/deactivate every app control that is not part of a tutorial step.
       + ' body.pxParentMode #controlsPanel, body.pxParentMode #quickCommandBar, body.pxParentMode #edgeTabStack, body.pxParentMode #playerActionBar, body.pxParentMode #timelineCommandsBar, body.pxParentMode #presentationPlaybackBar, body.pxParentMode #ballOwnerStatus, body.pxParentMode #autosaveStatus, body.pxParentMode #shotClockLeft, body.pxParentMode #shotClockRight, body.pxParentMode #studioFrameDots, body.pxParentMode h1{ display:none !important; }';
     document.head.appendChild(s);
@@ -11746,6 +11751,5 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   }
   MIZE.Parent = PX;
 })();
-
 </script>
 </body></html>
