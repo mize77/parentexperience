@@ -11181,6 +11181,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     }
   }
   function restartToBlue(){
+    PX.hideGoalZoom();         // ensure the goal-line close-up is gone
     stopFollow();              // release the shooter's defender-follow before repositioning
     setShootingAngle(false);   // never carry the shooting-angle lines into the kick-off (they'd redraw for the new carrier)
     clearHoldCinematic();      // drop any lingering spotlight/ring
@@ -11389,6 +11390,56 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     PX._ballDragCleanup=cleanup;
   }
 
+  // A self-contained circular "magnifier" of the goal-line spot. Because the net
+  // is not part of the real field (x behind the goal line clamps), we draw a
+  // zoomed close-up: the goal line, the net behind it, the ball ON the line, and
+  // a ghost just OVER the line. The parent drags the ball across the line onto
+  // the ghost — inside the circle — which resolves the whole "can't push into
+  // the net" problem.
+  PX.hideGoalZoom = function(){ const w=document.getElementById('pxGoalZoom'); if(w){ if(w._cleanup) w._cleanup(); w.remove(); } };
+  function showGoalZoomDrag(onDone){
+    PX.hideGoalZoom();
+    const D=Math.round(Math.min(280, Math.min(window.innerWidth, window.innerHeight)*0.66));
+    const lineX=0.60, ghostX=0.28;   // fractions of the circle width (net is LEFT of the line)
+    const wrap=make('div'); wrap.id='pxGoalZoom';
+    wrap.style.cssText='position:fixed;left:50%;top:44%;transform:translate(-50%,-50%);width:'+D+'px;height:'+D+'px;z-index:10000;'
+      +'border-radius:50%;overflow:hidden;touch-action:none;pointer-events:auto;'
+      +'background:radial-gradient(circle at 62% 50%, #7fd3ec 0%, #4aa8cf 68%, #2e88b0 100%);'
+      +'box-shadow:0 12px 44px rgba(0,0,0,.5), 0 0 0 5px #ffd23f;';
+    // net cross-hatch (left of the line) + goal line (animated) + ghost
+    let net='';
+    for(let i=0;i<=lineX*100;i+=7){ net+='<line x1="'+i+'" y1="0" x2="'+i+'" y2="100" stroke="rgba(255,255,255,.22)" stroke-width="0.5"/>'; }
+    for(let j=0;j<=100;j+=7){ net+='<line x1="0" y1="'+j+'" x2="'+(lineX*100)+'" y2="'+j+'" stroke="rgba(255,255,255,.22)" stroke-width="0.5"/>'; }
+    const lx=lineX*100, gx=ghostX*100;
+    wrap.innerHTML='<svg viewBox="0 0 100 100" width="100%" height="100%" style="position:absolute;inset:0;pointer-events:none;">'
+      +'<rect x="0" y="0" width="'+lx+'" height="100" fill="rgba(255,255,255,.10)"/>'+net
+      +'<text x="'+(lx*0.42)+'" y="52" text-anchor="middle" font-size="7" font-weight="800" fill="rgba(255,255,255,.75)" style="letter-spacing:.5px;">GOAL</text>'
+      +'<line x1="'+lx+'" y1="5" x2="'+lx+'" y2="95" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round">'
+        +'<animate attributeName="stroke-width" values="2.4;3.6;2.4" dur="1.3s" repeatCount="indefinite"/>'
+        +'<animate attributeName="opacity" values="1;.6;1" dur="1.3s" repeatCount="indefinite"/></line>'
+      +'<circle cx="'+gx+'" cy="50" r="9" fill="rgba(8,20,35,.5)" stroke="#ffd23f" stroke-width="2.5" stroke-dasharray="4 3"/>'
+      +'</svg>';
+    const ball=make('div'); ball.id='pxZoomBall';
+    ball.style.cssText='position:absolute;width:30px;height:30px;border-radius:50%;transform:translate(-50%,-50%);cursor:grab;touch-action:none;pointer-events:auto;'
+      +'background:radial-gradient(circle at 35% 30%, #ffe680, #f2b100 62%, #c98800);box-shadow:0 3px 8px rgba(0,0,0,.45);';
+    ball.style.left=(lineX*D)+'px'; ball.style.top=(D/2)+'px';
+    wrap.appendChild(ball);
+    document.body.appendChild(wrap);
+    let dragging=false, done=false;
+    function local(e){ const r=wrap.getBoundingClientRect(); return { x:e.clientX-r.left, y:e.clientY-r.top }; }
+    function down(e){ if(done) return; e.preventDefault(); e.stopPropagation(); dragging=true; try{ ball.setPointerCapture(e.pointerId); }catch(_){} }
+    function move(e){ if(!dragging) return; const q=local(e); const x=Math.max(10,Math.min(D-10,q.x)), y=Math.max(10,Math.min(D-10,q.y)); ball.style.left=x+'px'; ball.style.top=y+'px'; }
+    function upH(e){ if(!dragging) return; dragging=false; const x=parseFloat(ball.style.left);
+      if(x <= ghostX*D + 16){   // ball reached the ghost, over the line
+        done=true; ball.style.transition='left .22s ease, top .22s ease'; ball.style.left=(ghostX*D)+'px'; ball.style.top=(D/2)+'px';
+        cleanup(); setTimeout(()=>{ PX.hideGoalZoom(); if(onDone) onDone(); }, 260);
+      }
+    }
+    function cleanup(){ ball.removeEventListener('pointerdown',down); document.removeEventListener('pointermove',move,true); document.removeEventListener('pointerup',upH,true); }
+    wrap._cleanup=cleanup;
+    ball.addEventListener('pointerdown',down); document.addEventListener('pointermove',move,true); document.addEventListener('pointerup',upH,true);
+  }
+
   PX.buildLesson2Steps = function(){
     const steps=[];
     let drivePlayer=null, driveTarget=null;
@@ -11474,19 +11525,15 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       validate:{ type:'custom', fn:()=> PX._goalScored===true }
     });
 
-    // 2.7 What is a goal — the parent drags the ball fully across the line
+    // 2.7 What is a goal — a zoomed-in close-up of the goal line (the net isn't
+    // part of the real field, so we magnify the spot and let the parent push the
+    // ball across the line onto the ghost inside the circle).
     steps.push({
-      instruction:'A goal counts only when the WHOLE ball crosses the goal line, between the posts and under the crossbar. Drag the ball forward across the goal line, onto the dark target.',
+      instruction:'A goal counts only when the WHOLE ball crosses the goal line, between the posts and under the crossbar. This is a close-up of the goal line — drag the ball across it, into the goal, onto the ghost.',
       bannerSide:'top', skipDimPhase:true, highlight:null,
-      allowedSelectors:'#ball',   // exempt the ball from the interaction lock so it can be tapped/dragged
-      onEnter:function(){ PX._goalDragged=false; setShootingAngle(false);   // stay in Front Court (zoomed in on the goal)
-        if(typeof ballCarrier!=='undefined') ballCarrier=null;
-        const by=(typeof ball!=='undefined'&&ball)?+ball.dataset.y:CY;
-        if(typeof ball!=='undefined'&&ball){ ball.dataset.x=BLUE_GOAL.x+1.4; ball.dataset.y=by; if(typeof placeBall==='function') placeBall(); }   // sit the ball just in FRONT of the line (distinct from the target)
-        const tgt={ x:BLUE_GOAL.x, y:by };                        // dark target ON the goal line
-        showBallGhost(tgt.x, tgt.y);
-        persistSpotlight(BLUE_GOAL.x+0.7, by, 3.2);               // PERSISTENT vision circle around the ball + target
-        armBallDrag('left', function(){ PX._goalDragged=true; hideBallGhost(); clearHoldCinematic(); PX.flash('GOAL!','goal'); }, 0.1);   // completes on reaching the goal-line target
+      allowedSelectors:'#pxGoalZoom',   // the zoom widget stays interactive under the lock
+      onEnter:function(){ PX._goalDragged=false; setShootingAngle(false);
+        showGoalZoomDrag(function(){ PX._goalDragged=true; PX.flash('GOAL!','goal'); });
       },
       validate:{ type:'custom', fn:()=> PX._goalDragged===true }
     });
@@ -11652,7 +11699,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     PX.clearActors(); PX.clearReferees();
     PX.showStartScreen(beginLessons);   // back to "Water Polo made easy" start screen
   };
-  PX.exitWp = function(){ PX.hideNav(); PX.exitFrontCourt(); PX.stopRefTracking(); if(typeof tutorialModeActive!=='undefined' && tutorialModeActive && typeof exitTutorial==='function') exitTutorial(); PX.showWpEnd('exit'); };
+  PX.exitWp = function(){ PX.hideNav(); PX.hideGoalZoom(); PX.exitFrontCourt(); PX.stopRefTracking(); if(typeof tutorialModeActive!=='undefined' && tutorialModeActive && typeof exitTutorial==='function') exitTutorial(); PX.showWpEnd('exit'); };
 
   function beginLessons(){
     document.body.classList.add('guestExperienceActive');   // lock-down CSS only (no coach exit wiring)
