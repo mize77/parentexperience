@@ -10880,7 +10880,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     const anims=[];
     [['white', WHITE_GOAL], ['blue', BLUE_GOAL]].forEach(function(cfg){
       const team=cfg[0], ownGoal=cfg[1], pre=team==='white'?'W':'B';
-      const fields=(team==='white'?whiteFields():blueFields()).filter(p=>p.dataset.label!==pre+'6');   // keep the centre/shooter
+      const fields=(team==='white'?whiteFields():blueFields()).filter(p=>p.dataset.label!==pre+'6' && !(typeof ballCarrier!=='undefined' && p===ballCarrier));   // never sub out the centre or the ball carrier
       const leaving=fields[0]; if(!leaving) return;
       const cornerX = ownGoal.x===27 ? 25 : 4;                     // re-entry corner near own goal
       const corner={ x:cornerX, y:22.4 }, spot={ x:+leaving.dataset.x, y:+leaving.dataset.y };
@@ -11477,13 +11477,14 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       validate:{ type:'custom', fn:()=> PX._goalDragged===true }
     });
 
-    // 2.7b Substitution — one field player per team swims out and a fresh one swims in
-    steps.push(animatedWatch('Teams can substitute during the match. A field player swims out at the re-entry corner next to their own goal, and a fresh team-mate (not the goalkeeper) swims in to take their place.',
-      function(){ PX.exitFrontCourt(); return PX.substitutionDemo(); }));
-
     // 2.8 After the goal — kick-off, Blue possession (only starts once the parent confirms)
     steps.push(ackThenAnimate('After a goal, both teams move into their own half. The kick-off often starts from the middle of the pool, but it can start anywhere in the half of the team that has the ball. Blue was scored on, so Blue now has possession — and the referees swap responsibilities. Tap “Got it” to start the kick-off.',
       function(){ restartToBlue(); return delay(1900); }));
+
+    // 2.8b Substitution — now the teams are set up in full court, so the swim-out /
+    // swim-in is clearly visible.
+    steps.push(animatedWatch('Teams can substitute during the match. Watch: a field player swims out at the re-entry corner next to their own goal, and a fresh team-mate (not the goalkeeper) swims in to take their place.',
+      function(){ return PX.substitutionDemo(); }));
 
     // 2.9 YOU TRY — which goal is Blue attacking? (clear tappable targets on both goals)
     steps.push({
