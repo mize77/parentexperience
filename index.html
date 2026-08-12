@@ -10600,12 +10600,17 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     const r1=document.getElementById('pxRefTop'), r2=document.getElementById('pxRefBottom');
     if(!r1||!r2) return;
     const blueHasBall = (typeof ballCarrier!=='undefined' && ballCarrier && ballCarrier.dataset.team==='blue');
-    // White attacks the LEFT goal (x=2); Blue attacks the RIGHT goal (x=27).
-    const attackedX = blueHasBall ? WHITE_GOAL.x : BLUE_GOAL.x;
-    const twoMx = (attackedX===BLUE_GOAL.x) ? 4 : 25;          // 2m in from the attacked goal line
-    placeRef(r1, twoMx, 1.1);                                   // R1 on the attacked goal's 2m line (top sideline)
-    const bx = (typeof ball!=='undefined' && ball) ? Math.max(3, Math.min(26, +ball.dataset.x)) : MID_X;
-    placeRef(r2, bx, 22.9);                                     // R2 level with the ball (bottom sideline)
+    const bx = (typeof ball!=='undefined' && ball) ? Math.max(3, Math.min(26, +ball.dataset.x)) : MID_X;   // ball's depth
+    // Referees SWAP responsibilities with possession:
+    //  • White attacking (default): R1 on the LEFT 2m line, R2 in line with the ball.
+    //  • Blue attacking: R1 in line with the ball, R2 on the RIGHT 2m line.
+    if(blueHasBall){
+      placeRef(r1, bx, 1.1);        // R1 -> in line with the ball
+      placeRef(r2, 25, 22.9);       // R2 -> 2m line of the goal Blue attacks (right)
+    } else {
+      placeRef(r1, 4, 1.1);         // R1 -> 2m line of the goal White attacks (left)
+      placeRef(r2, bx, 22.9);       // R2 -> in line with the ball
+    }
   };
   PX.startRefTracking = function(){ if(PX._refTrack) return; PX.updateReferees(); PX._refTrack=setInterval(PX.updateReferees, 200); };
   PX.stopRefTracking = function(){ if(PX._refTrack){ clearInterval(PX._refTrack); PX._refTrack=null; } };
@@ -10852,6 +10857,18 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       onEnter:function(){ done=false; let r=null; try{ r=runFn&&runFn(); }catch(e){} if(r&&typeof r.then==='function') r.then(()=>{ done=true; }); else done=true; },
       validate:{ type:'custom', fn:()=> done===true && tutorialManualAck } };
   }
+  // Read first, THEN act: shows the instruction and waits for "Got it"; only
+  // after the parent confirms does runFn() run (e.g. the kick-off), and the step
+  // advances when that animation finishes.
+  function ackThenAnimate(instruction, runFn){
+    let started=false, done=false;
+    return { instruction, bannerSide:'top', skipDimPhase:true, highlight:null, requiresAcknowledge:true,
+      onEnter:function(){ started=false; done=false; },
+      validate:{ type:'custom', fn:function(){
+        if(tutorialManualAck && !started){ started=true; let r=null; try{ r=runFn&&runFn(); }catch(e){} if(r&&typeof r.then==='function') r.then(()=>{ done=true; }); else done=true; }
+        return done===true;
+      }} };
+  }
 
   PX.buildLesson1Steps = function(){
     const steps=[];
@@ -10989,17 +11006,18 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   // board (z-index above everything), so this step can always be completed.
   function showGoalTapTargets(onCorrect){
     clearGoalTapTargets(); const bd=boardEl(); if(!bd) return; const r=bd.getBoundingClientRect();
-    [['left', r.left, false],['right', r.left+r.width*0.62, true]].forEach(function(g){
+    const W=r.width*0.22;   // narrow strips at each GOAL end only — nothing near the middle line
+    [['left', r.left, false],['right', r.left+r.width-W, true]].forEach(function(g){
       const correct=g[2];
       const t=make('div','pxGoalTap'); t.dataset.px='goaltap';
-      t.style.cssText='position:fixed;top:'+r.top+'px;height:'+r.height+'px;width:'+(r.width*0.38)+'px;left:'+g[1]+'px;z-index:10000;'
-        +'display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;pointer-events:auto;'
-        +'border:3px dashed '+(correct?'#1565c0':'#6b7a99')+';border-radius:10px;background:'+(correct?'rgba(21,101,192,0.12)':'rgba(107,122,153,0.05)')+';';
-      if(correct){ const lab=make('div'); lab.textContent='TAP THIS GOAL'; lab.style.cssText='font:800 15px system-ui;color:#1565c0;background:rgba(255,255,255,.9);padding:8px 12px;border-radius:10px;pointer-events:none;'; t.appendChild(lab); }
+      t.style.cssText='position:fixed;top:'+r.top+'px;height:'+r.height+'px;width:'+W+'px;left:'+g[1]+'px;z-index:10000;'
+        +'display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;pointer-events:auto;border:none;background:transparent;';   // no border/box -> no stray dotted lines
+      if(correct){ const lab=make('div'); lab.textContent='TAP THIS GOAL'; lab.style.cssText='font:800 14px system-ui;color:#fff;background:#1565c0;padding:8px 12px;border-radius:10px;box-shadow:0 3px 10px rgba(0,0,0,.35);pointer-events:none;'; t.appendChild(lab); }
       const handle=function(ev){ if(ev){ ev.preventDefault(); ev.stopPropagation(); } if(correct){ clearGoalTapTargets(); if(onCorrect) onCorrect(); } else { PX.flash('That’s the goal Blue defends — try the other end',''); } };
       t.addEventListener('pointerup', handle); t.addEventListener('click', handle);
       document.body.appendChild(t);
     });
+    pulseGoal('right', '#1565c0', 3600);   // glow the goal Blue attacks
   }
   function passBallTo(toEl, ms){
     return new Promise(res=>{
@@ -11387,6 +11405,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       bannerSide:'top', skipDimPhase:true, highlight:null,
       allowedSelectors:'#ball',   // exempt the ball from the interaction lock so it can be tapped/dragged
       onEnter:function(){ PX._goalDragged=false; setShootingAngle(false);
+        PX.exitFrontCourt();   // zoom back out so the goal, the net and the ball's ghost are all visible
         if(typeof ballCarrier!=='undefined') ballCarrier=null;   // keep the ball where the shot left it — on the line
         const bx=(typeof ball!=='undefined'&&ball)?+ball.dataset.x:BLUE_GOAL.x;
         const by=(typeof ball!=='undefined'&&ball)?+ball.dataset.y:CY;
@@ -11399,9 +11418,9 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       validate:{ type:'custom', fn:()=> PX._goalDragged===true }
     });
 
-    // 2.8 After the goal — kick-off, Blue possession
-    steps.push(watch('After a goal, both teams move into their own half. The kick-off often starts from the middle of the pool, but it can start anywhere in the half of the team that has the ball. Blue was scored on, so Blue now has possession.',
-      ()=>{ restartToBlue(); }));
+    // 2.8 After the goal — kick-off, Blue possession (only starts once the parent confirms)
+    steps.push(ackThenAnimate('After a goal, both teams move into their own half. The kick-off often starts from the middle of the pool, but it can start anywhere in the half of the team that has the ball. Blue was scored on, so Blue now has possession — and the referees swap responsibilities. Tap “Got it” to start the kick-off.',
+      function(){ restartToBlue(); return delay(1900); }));
 
     // 2.9 YOU TRY — which goal is Blue attacking? (clear tappable targets on both goals)
     steps.push({
@@ -11415,9 +11434,9 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     steps.push(watch('A water polo game is divided into four periods.',
       ()=>{ PX.flash('FOUR PERIODS','',1800); }));
 
-    // 2.11 Follow the referees
-    steps.push(watch('The referees move with the play — one focuses on the action near the goal, the other on the perimeter and developing play.',
-      ()=>{ PX.showReferees(); }));
+    // 2.11 Follow the referees — keep them tracking (positions follow possession)
+    steps.push(watch('The referees move with the play — one focuses on the action near the goal, the other on the perimeter and developing play. Their roles switch each time possession changes.',
+      ()=>{ if(!document.getElementById('pxRefTop')) PX.showReferees(); PX.startRefTracking(); PX.updateReferees(); }));
 
     return steps;
   };
