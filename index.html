@@ -10512,15 +10512,22 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     }
     out.forEach(fadeIn); return out;
   };
-  // The six substitutes (field caps 8..12 + backup goalie cap 13) swim to the
-  // nearest pool edge and leave the water.
+  // The re-entry / exclusion area is on the UPPER side of the pool, at the corner
+  // nearest each team's own goal. Substitutes leave the water there, and later
+  // substitutions happen there too.
+  PX.RE_ENTRY_Y = 1.4;                                                   // top edge of the pool
+  PX.reEntryCorner = function(team){ return { x: team==='white' ? 25 : 4, y: PX.RE_ENTRY_Y }; };
+  // The six substitutes (field caps 8..12 + backup goalie cap 13) all swim up to
+  // the upper-side re-entry area near their own goal and leave the water.
   PX.swimSubsOut = function(team){
     const pre = team==='white' ? 'W' : 'B';
+    const corner = PX.reEntryCorner(team);
+    const dir = team==='white' ? -1 : 1;                                 // fan back toward the centre so they don't stack
     const subs = qa('.player').filter(p=>{ const l=p.dataset.label||'';
       if(l===pre+'GB') return true; const m=l.match(new RegExp('^'+pre+'(\\d+)$')); return !!(m && (+m[1])>=7); });
-    return Promise.all(subs.map(p=>{
-      const edgeY = (+p.dataset.y) < CY ? 0.6 : 23.4;   // nearest edge (top / bottom)
-      return swim(p, { x:+p.dataset.x, y:edgeY }, 1700, 'h').then(()=>{
+    return Promise.all(subs.map((p,i)=>{
+      const tx = corner.x + dir*(i*1.25);                                // spread along the top edge by the corner
+      return swim(p, { x:tx, y:corner.y }, 1900, 'h').then(()=>{
         p.style.transition='opacity .5s ease'; p.style.opacity='0'; setTimeout(()=>p.remove(), 520);
       });
     }));
@@ -10878,15 +10885,16 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   };
 
   // A substitution: one field player per team (not the goalie) swims out at the
-  // re-entry corner near their own goal, and a fresh player swims in from there.
+  // upper-side re-entry / exclusion area near their own goal, and a fresh player
+  // swims in from there — the same area the substitutes left from at the start.
   PX.substitutionDemo = function(){
     const anims=[];
     [['white', WHITE_GOAL], ['blue', BLUE_GOAL]].forEach(function(cfg){
       const team=cfg[0], ownGoal=cfg[1], pre=team==='white'?'W':'B';
       const fields=(team==='white'?whiteFields():blueFields()).filter(p=>p.dataset.label!==pre+'6' && !(typeof ballCarrier!=='undefined' && p===ballCarrier));   // never sub out the centre or the ball carrier
       const leaving=fields[0]; if(!leaving) return;
-      const cornerX = ownGoal.x===27 ? 25 : 4;                     // re-entry corner near own goal
-      const corner={ x:cornerX, y:22.4 }, spot={ x:+leaving.dataset.x, y:+leaving.dataset.y };
+      const corner=PX.reEntryCorner(team);                         // upper-side re-entry area near own goal
+      const spot={ x:+leaving.dataset.x, y:+leaving.dataset.y };
       // leaving player swims to the corner and leaves the water
       anims.push(swim(leaving, corner, 1700, 'h').then(function(){ leaving.style.transition='opacity .5s ease'; leaving.style.opacity='0'; setTimeout(()=>leaving.remove(), 520); }));
       // a fresh substitute (cap 8) swims in from the corner to the vacated spot
@@ -11403,7 +11411,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   function showGoalZoomDrag(onDone){
     PX.hideGoalZoom();
     const D=Math.round(Math.min(280, Math.min(window.innerWidth, window.innerHeight)*0.66));
-    const lineX=0.60, ghostX=0.28;   // fractions of the circle width (net is LEFT of the line)
+    const lineX=0.60;   // goal line position as a fraction of the circle width (net is LEFT of the line)
     const wrap=make('div'); wrap.id='pxGoalZoom';
     wrap.style.cssText='position:fixed;left:50%;top:44%;transform:translate(-50%,-50%);width:'+D+'px;height:'+D+'px;z-index:10000;'
       +'border-radius:50%;overflow:hidden;touch-action:none;pointer-events:auto;'
@@ -11413,19 +11421,31 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     let net='';
     for(let i=0;i<=lineX*100;i+=7){ net+='<line x1="'+i+'" y1="0" x2="'+i+'" y2="100" stroke="rgba(255,255,255,.22)" stroke-width="0.5"/>'; }
     for(let j=0;j<=100;j+=7){ net+='<line x1="0" y1="'+j+'" x2="'+(lineX*100)+'" y2="'+j+'" stroke="rgba(255,255,255,.22)" stroke-width="0.5"/>'; }
-    const lx=lineX*100, gx=ghostX*100;
+    const lx=lineX*100;
+    const R=45;                          // ball radius in px (ball is 90px)
+    const lineXpx=lineX*D;               // goal line, in px
+    const gap=6;                         // ghost sits this close to the line without touching
+    const ghostCx=lineXpx - R - gap;     // ghost centre so the WHOLE ball is just inside the goal
+    const ghostCy=D/2;
     wrap.innerHTML='<svg viewBox="0 0 100 100" width="100%" height="100%" style="position:absolute;inset:0;pointer-events:none;">'
       +'<rect x="0" y="0" width="'+lx+'" height="100" fill="rgba(255,255,255,.10)"/>'+net
-      +'<text x="'+(lx*0.42)+'" y="52" text-anchor="middle" font-size="7" font-weight="800" fill="rgba(255,255,255,.75)" style="letter-spacing:.5px;">GOAL</text>'
+      +'<text x="'+(lx*0.5)+'" y="13" text-anchor="middle" font-size="7.5" font-weight="800" fill="rgba(255,255,255,.7)" style="letter-spacing:1px;">GOAL</text>'
       +'<line x1="'+lx+'" y1="5" x2="'+lx+'" y2="95" stroke="#ffffff" stroke-width="4" stroke-linecap="round">'
         +'<animate attributeName="stroke-width" values="4;5.4;4" dur="1.3s" repeatCount="indefinite"/>'
         +'<animate attributeName="opacity" values="1;.6;1" dur="1.3s" repeatCount="indefinite"/></line>'
-      +'<circle cx="'+gx+'" cy="50" r="13" fill="rgba(8,20,35,.5)" stroke="#ffd23f" stroke-width="2.5" stroke-dasharray="4 3"/>'
       +'</svg>';
+    // Ghost: a ball-shaped SHADOW, same size as the ball, sitting inside the goal
+    // as close to the line as possible without touching it.
+    const ghost=make('div'); ghost.id='pxZoomGhost';
+    ghost.style.cssText='position:absolute;width:90px;height:90px;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;'
+      +'background:radial-gradient(circle at 35% 30%, rgba(255,255,255,.10), rgba(8,20,35,.30) 60%, rgba(8,20,35,.42));'
+      +'border:2px dashed rgba(255,210,63,.9);box-shadow:inset 0 0 16px rgba(0,0,0,.35);';
+    ghost.style.left=ghostCx+'px'; ghost.style.top=ghostCy+'px';
+    wrap.appendChild(ghost);
     const ball=make('div'); ball.id='pxZoomBall';
     ball.style.cssText='position:absolute;width:90px;height:90px;border-radius:50%;transform:translate(-50%,-50%);cursor:grab;touch-action:none;pointer-events:auto;'   // 3x bigger
       +'background:radial-gradient(circle at 35% 30%, #ffe680, #f2b100 62%, #c98800);box-shadow:0 3px 10px rgba(0,0,0,.45);';
-    ball.style.left=(lineX*D)+'px'; ball.style.top=(D/2)+'px';
+    ball.style.left=(lineX*D)+'px'; ball.style.top=(D/2)+'px';   // ball starts ON the line (straddling it)
     wrap.appendChild(ball);
     document.body.appendChild(wrap);
     let dragging=false, done=false;
@@ -11433,8 +11453,8 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     function down(e){ if(done) return; e.preventDefault(); e.stopPropagation(); dragging=true; try{ ball.setPointerCapture(e.pointerId); }catch(_){} }
     function move(e){ if(!dragging) return; const q=local(e); const x=Math.max(10,Math.min(D-10,q.x)), y=Math.max(10,Math.min(D-10,q.y)); ball.style.left=x+'px'; ball.style.top=y+'px'; }
     function upH(e){ if(!dragging) return; dragging=false; const x=parseFloat(ball.style.left);
-      if(x <= ghostX*D + 16){   // ball reached the ghost, over the line
-        done=true; ball.style.transition='left .22s ease, top .22s ease'; ball.style.left=(ghostX*D)+'px'; ball.style.top=(D/2)+'px';
+      if(x + R <= lineXpx - 1){   // the WHOLE ball has crossed the line (trailing edge just past it, not touching) -> a goal
+        done=true; ball.style.transition='left .22s ease, top .22s ease'; ball.style.left=ghostCx+'px'; ball.style.top=ghostCy+'px';
         cleanup(); setTimeout(()=>{ PX.hideGoalZoom(); if(onDone) onDone(); }, 260);
       }
     }
