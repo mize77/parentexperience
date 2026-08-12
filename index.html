@@ -10914,6 +10914,8 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     return { instruction, bannerSide:'top', skipDimPhase:true, highlight:null, requiresAcknowledge:true,
              onEnter:onEnter||null, validate:{ type:'custom', fn:()=> tutorialManualAck } };
   }
+  // True on phones / tablets (coarse pointer) — used to show mobile-only advice.
+  function pxIsTouch(){ return typeof isTouchDevice==='function' && isTouchDevice(); }
   // Like watch(), but the scene runs an animation first; the parent must still
   // press "Got it" to move on (the step waits until the animation is done AND
   // the confirmation is given). runFn may return a promise.
@@ -10942,6 +10944,9 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     // 1.1 Welcome — only water
     steps.push(watch('Welcome to water polo. Let’s start with the place where everything happens — the pool.',
       ()=>{ PX.clearActors(); PX.clearReferees(); PX.field.setPhase('water'); }));
+
+    // 1.1b Landscape tip — phones / tablets only: hold the device sideways
+    if(pxIsTouch()) steps.push(watch('One quick tip before we begin: this tutorial works best on a phone or tablet held sideways, in landscape. Turn your device to landscape now for the clearest view of the whole pool, then tap “Got it”.'));
 
     // 1.2 Meet White — full 13-player squad in a circle on their (right) half
     steps.push(watch('Here is the White team. A full squad has thirteen players, including TWO goalkeepers — they wear the caps numbered 1 and 13.',
@@ -10999,6 +11004,16 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     // 1.10 Teams set up — offense perimeter at the blue goal (needs Got it)
     steps.push(animatedWatch('White has the ball and attacks the Blue goal. The teams set up: White in attack, Blue defending each zone.',
       function(){ return PX.setupOffense().then(()=>{ PX.flash('OFFENSE SET UP','good'); }); }));
+
+    // 1.10a Landscape swipe tip — phones / tablets only: how to see the whole action
+    // now that the view has zoomed in to the attacking half (Front Court).
+    if(pxIsTouch()) steps.push({
+      instruction:'The view is now zoomed in to the attacking half. On a phone or tablet in landscape, the whole play may not fit on screen at once — swipe up or down along the LEFT or RIGHT edge of the screen to move the view and follow the full action. Give it a try, then tap “Got it”.',
+      bannerSide:'top', requiresAcknowledge:true, useScrollHint:true,
+      highlight:['#fcScrollZoneLeft','#fcScrollZoneRight'],
+      onEnter:function(){ PX.enterFrontCourt(); },   // ensure Front Court is active so the scroll strips exist
+      validate:{ type:'custom', fn:()=> tutorialManualAck }
+    });
 
     // 1.10b Brief note on the zones (numbers only) — then they blend out at the next step
     steps.push(watch('The numbered field zones are just orientation areas that help the players spread out — they are NOT official field markings. Coaches use different numbers or names for them; here we use the common 1–6 pattern.',
@@ -11684,8 +11699,26 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       const h=function(ev){ if(ev){ ev.preventDefault(); ev.stopPropagation(); } if(b._pxLock) return; b._pxLock=true; setTimeout(()=>{ b._pxLock=false; }, 400); if(typeof fn==='function') fn(); };
       b.addEventListener('pointerup',h); b.addEventListener('click',h); return b; };
     nav.appendChild(mk('Exit tutorial','#8a3a3a', PX.exitWp));
+    nav.appendChild(mk('Next step →','#37474f', PX.skipStep));   // escape hatch: auto-complete the current step and move on
     nav.appendChild(mk('Move to next lesson →','#1a6363', PX.nextLesson));
     document.body.appendChild(nav);
+  };
+  // Escape hatch — the current step is never a dead end: clean up any live
+  // interaction (shoot / tap / choice / goal-zoom / follow / selection) and
+  // advance to the next step, so the parent is never stuck if a drag or tap
+  // does not register.
+  PX.skipStep = function(){
+    try{ if(PX.shoot && PX.shoot.cancel) PX.shoot.cancel(); }catch(e){}
+    try{ if(PX.tap && PX.tap.disarm) PX.tap.disarm(); }catch(e){}
+    try{ if(PX.choice && PX.choice.clear) PX.choice.clear(); }catch(e){}
+    try{ PX.hideGoalZoom(); }catch(e){}
+    try{ clearHoldCinematic(); }catch(e){}
+    try{ stopFollow(); }catch(e){}
+    try{ setShootingAngle(false); }catch(e){}
+    try{ PX.clearSelections(); }catch(e){}
+    try{ if(PX.clearFlash) PX.clearFlash(); }catch(e){}
+    const cur=(typeof tutorialStepIndex!=='undefined')?tutorialStepIndex:0;
+    if(typeof goToTutorialStep==='function') goToTutorialStep(cur+1);
   };
   PX.hideNav = function(){ const n=document.getElementById('pxNav'); if(n) n.remove(); };
   PX.nextLesson = function(){
