@@ -10772,6 +10772,9 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   // zone mid-angles for z1..z5 (36° wedges, -90..90), center = z6
   const ZONE_ANGLE = { z1:-72, z2:-36, z3:0, z4:36, z5:72 };
   function zoneCentroid(id){ return zonePt(ZONE_ANGLE[id], (FZ_INNER+FZ_OUTER)/2); }
+  // Same wedge geometry mirrored to the RIGHT (white) goal — for the second-half
+  // set-up after Blue wins possession.
+  function zoneCentroidRight(id){ const c=zoneCentroid(id); return { x:29-c.x, y:c.y }; }
 
   // Move while staying VERTICAL and continuously facing the ball point
   // (a smart-positioned goalkeeper tracking the play).
@@ -10839,6 +10842,58 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     await Promise.all(anims);
     if(carrier && typeof moveBallTo==='function') moveBallTo(carrier, 'right');   // ball rests with zone-4 attacker
     PX.enterFrontCourt();   // teams are set up in the zones -> zoom to the attacking half
+  };
+
+  // After Blue wins the ball, the teams set up in the WHITE half (mirror of the
+  // offense set-up) — Blue attacking the white goal, White defending. Stays full court.
+  PX.setupWhiteHalf = async function(){
+    stopFollow();
+    const blues=blueFields(), whites=whiteFields();
+    let carrier=(typeof ballCarrier!=='undefined'&&ballCarrier&&ballCarrier.dataset.team==='blue')?ballCarrier:blues[0];
+    const others=blues.filter(b=>b!==carrier);
+    const perimeter=[{zone:'z4',b:carrier}];
+    ['z1','z2','z3','z5'].forEach((z,i)=>{ if(others[i]) perimeter.push({zone:z, b:others[i]}); });
+    const centerBlue=others[4];
+    const anims=[], usedWhite=[];
+    perimeter.forEach(function(pa, idx){
+      const c=zoneCentroidRight(pa.zone);
+      anims.push(swimSettle(pa.b, c, 3500, faceTo(c.x,c.y, WHITE_GOAL.x, WHITE_GOAL.y), 'v'));   // Blue attacker faces the white goal
+      const dirx=WHITE_GOAL.x-c.x, diry=WHITE_GOAL.y-c.y, dl=Math.hypot(dirx,diry)||1;
+      const dp={ x:c.x+dirx/dl, y:c.y+diry/dl };                                                 // white defender 1m goal-side
+      const w=whites[idx]; usedWhite.push(w);
+      if(w) anims.push(swimSettle(w, dp, 3500, faceTo(dp.x,dp.y, c.x,c.y), 'v'));
+    });
+    const cB={ x:WHITE_GOAL.x-2.5, y:CY }, ballPt=zoneCentroidRight('z4');
+    if(centerBlue) anims.push(swimSettle(centerBlue, cB, 3500, faceTo(cB.x,cB.y, ballPt.x,ballPt.y), 'v'));
+    const centerWhite=whites.filter(w=>usedWhite.indexOf(w)<0)[0];
+    if(centerWhite) anims.push(swimSettle(centerWhite, {x:cB.x+0.9,y:CY}, 3500, faceTo(cB.x+0.9,CY, ballPt.x,ballPt.y), 'v'));
+    const wgk=whiteGoalie(), bgk=blueGoalie();
+    if(wgk) anims.push(swimVerticalTrack(wgk, {x:WHITE_GOAL.x-0.6, y:CY}, 3500, ballPt));   // white GK defends the right goal
+    if(bgk) anims.push(swimSettle(bgk, {x:BLUE_GOAL.x+4, y:CY}, 3500, 90, 'h'));
+    await Promise.all(anims);
+    if(carrier && typeof moveBallTo==='function') moveBallTo(carrier, 'left');   // ball on the goal-side (left) hand toward the white goal
+  };
+
+  // A substitution: one field player per team (not the goalie) swims out at the
+  // re-entry corner near their own goal, and a fresh player swims in from there.
+  PX.substitutionDemo = function(){
+    const anims=[];
+    [['white', WHITE_GOAL], ['blue', BLUE_GOAL]].forEach(function(cfg){
+      const team=cfg[0], ownGoal=cfg[1], pre=team==='white'?'W':'B';
+      const fields=(team==='white'?whiteFields():blueFields()).filter(p=>p.dataset.label!==pre+'6');   // keep the centre/shooter
+      const leaving=fields[0]; if(!leaving) return;
+      const cornerX = ownGoal.x===27 ? 25 : 4;                     // re-entry corner near own goal
+      const corner={ x:cornerX, y:22.4 }, spot={ x:+leaving.dataset.x, y:+leaving.dataset.y };
+      // leaving player swims to the corner and leaves the water
+      anims.push(swim(leaving, corner, 1700, 'h').then(function(){ leaving.style.transition='opacity .5s ease'; leaving.style.opacity='0'; setTimeout(()=>leaving.remove(), 520); }));
+      // a fresh substitute (cap 8) swims in from the corner to the vacated spot
+      const sub=spawn(pre+'7', team, corner.x, corner.y, 'h', team==='white'?270:90);
+      const num=sub.querySelector('.capNumber'); if(num) num.textContent='8';
+      sub.style.opacity='0'; requestAnimationFrame(()=>requestAnimationFrame(()=>{ sub.style.transition='opacity .5s ease'; sub.style.opacity='1'; }));
+      const faceGoal = ownGoal.x===27 ? BLUE_GOAL : WHITE_GOAL;
+      anims.push(swimSettle(sub, spot, 1900, faceTo(spot.x,spot.y, faceGoal.x, faceGoal.y), 'v'));
+    });
+    return Promise.all(anims);
   };
 
   /* =====================================================================
@@ -11296,19 +11351,23 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
 
   // A dashed ghost marking where to drag the ball (inside the net).
   function showBallGhost(x,y){ hideBallGhost(); const bd=boardEl(); if(!bd) return;
-    const g=make('div','pxBallGhost','position:absolute;z-index:126;width:22px;height:22px;transform:translate(-50%,-50%);pointer-events:none;'); g.id='pxBallGhost';
-    g.innerHTML='<svg viewBox="0 0 22 22" width="22" height="22"><circle cx="11" cy="11" r="9" fill="rgba(255,210,63,.25)" stroke="#ffd23f" stroke-width="2" stroke-dasharray="3 3"/></svg>';
+    const g=make('div','pxBallGhost','position:absolute;z-index:126;width:30px;height:30px;transform:translate(-50%,-50%);pointer-events:none;'); g.id='pxBallGhost';
+    // DARK, high-contrast target so it is obvious against the water.
+    g.innerHTML='<svg viewBox="0 0 30 30" width="30" height="30"><circle cx="15" cy="15" r="12" fill="rgba(8,20,35,.72)" stroke="#ffd23f" stroke-width="3" stroke-dasharray="4 3"/></svg>';
     const s=boardToScreen(x,y); g.style.left=s.left; g.style.top=s.top; bd.appendChild(g); }
   function hideBallGhost(){ const g=document.getElementById('pxBallGhost'); if(g) g.remove(); }
 
   // Let the parent drag the ball across a goal line (touch-friendly).
-  function armBallDrag(side, onDone){
+  // crossOffset shifts the completion line: negative = past the line (into the
+  // net), positive = reaching the line. Default -0.25 (fully past).
+  function armBallDrag(side, onDone, crossOffset){
     if(typeof ball==='undefined' || !ball) return;
+    const off = (crossOffset!=null) ? crossOffset : -0.25;
     let dragging=false;
     function down(e){ e.preventDefault(); e.stopPropagation(); dragging=true; try{ ball.setPointerCapture(e.pointerId); }catch(_){} }
     function move(e){ if(!dragging) return; const m=pxToM(e); ball.dataset.x=m.x; ball.dataset.y=m.y; if(typeof placeBall==='function') placeBall(); }
     function up(e){ if(!dragging) return; dragging=false; const gx=GEO.goalLineX(side);
-      const crossed = side==='left' ? (+ball.dataset.x <= gx-0.25) : (+ball.dataset.x >= gx+0.25);
+      const crossed = side==='left' ? (+ball.dataset.x <= gx+off) : (+ball.dataset.x >= gx-off);
       if(crossed){ cleanup(); if(onDone) onDone(); } }
     function cleanup(){ ball.removeEventListener('pointerdown',down); document.removeEventListener('pointermove',move,true); document.removeEventListener('pointerup',up,true); }
     ball.style.cursor='grab'; ball.style.touchAction='none';
@@ -11337,7 +11396,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
           const def=nearestBlue(drivePlayer);
           if(def) startFollow(drivePlayer, def);   // defender shadows, keeping the same distance
           const sx=+drivePlayer.dataset.x, sy=+drivePlayer.dataset.y;
-          const tx=sx+2.2, ty=sy;   // back = away from the left goal
+          const tx=sx+1.0, ty=sy;   // ease back just 1m — the pair stays closer to the goal
           driveTarget={x:tx,y:ty};
           step22.ghost={ type:'playerPosition', targetPlayer:{ team:drivePlayer.dataset.team, pose:drivePlayer.dataset.pose, rot:+drivePlayer.dataset.rot||0, x:tx, y:ty, label:drivePlayer.dataset.label } };
           spotlightBetween(sx, sy, tx, ty, false);   // ONE circle around player + ghost
@@ -11355,17 +11414,18 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     // ---- LESSON 2A — PHYSICALITY ----
     // 2A.1 contact is allowed
     steps.push(watch('Water polo is a physical sport. Touching and body contact between players is allowed — so this on its own is not a foul.',
-      ()=>{ PX._leadFlash('CONTACT — PLAY ON',''); }));
+      ()=>{ PX._leadFlash('BODY CONTACT IS PART OF WATER POLO',''); }));
     // 2A.2 strong contact on the ball carrier is allowed (3s announcement + animation + spotlight)
     steps.push(watch('An important principle: a player who is holding the ball can be challenged much more physically. Strong contact on the ball carrier is allowed.',
       ()=>{ PX._leadFlash('STRONG CONTACT ON THE BALL CARRIER IS ALLOWED',''); carrierPressureDemo(); const a=PX._pressAtk||currentWhiteShooter(); if(a) setTimeout(()=>spotlightCircle(+a.dataset.x,+a.dataset.y,2.6,false), 2100); }));
-    // 2A.3 holding a player who is NOT holding the ball = foul / exclusion (18s)
-    steps.push(watch('Holding, sinking or pulling back a player who is NOT in possession of the ball is a foul — and it can be committed by a defender OR an attacker. Whether it is judged an ordinary foul or an exclusion depends on the situation, the intensity, and how rough the action is (an exclusion means the player leaves the field of play for 18 seconds — more on exclusions later).',
+    // 2A.3 holding a player who is NOT in possession = foul / exclusion — split across two boxes
+    steps.push(watch('Holding, sinking or pulling back a player who is NOT in possession of the ball is a foul — and it can be committed by a defender OR an attacker …',
       ()=>{ const bn=document.getElementById('tutorialBanner'); if(bn){ clearTimeout(PX._bannerT); bn.style.opacity='0'; }   // instruction appears only after the spotlight + WHISTLE
              holdZone5Demo(); }));
+    steps.push(watch('… whether it is judged an ordinary foul or an exclusion depends on the situation, the intensity, and how rough the action is. An exclusion means the player must leave the field of play for 18 seconds — more on exclusions later.'));
     // 2A.4 YOU TRY — is the player still in possession? (release animation; just the question)
     steps.push({
-      instruction:'Is the player still in possession of the ball?',
+      instruction:'Is the white player still in possession of the ball?',
       bannerSide:'top', skipDimPhase:true, highlight:null,
       onEnter:function(){ PX._bnbDone=false; clearHoldCinematic();
         ballReleaseDemo();
@@ -11379,17 +11439,18 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     // 2A.5 rough / illegal play — how fouls are signalled with the whistle
     steps.push(watch('Unnecessarily rough or illegal play can be punished with an ordinary foul or an exclusion (explained in more detail later). An ordinary foul is usually signalled by a single whistle blow; an exclusion by a combination of two or three stronger whistles.',
       ()=>{ clearHoldCinematic();
-        if(typeof PX.whistle==='function'){ PX.whistle(); setTimeout(()=>PX.whistle(),1500); setTimeout(()=>PX.whistle(),1750); setTimeout(()=>PX.whistle(),2000); }   // one blow, then a 2–3 blow combination
+        if(typeof PX.whistle==='function') PX.whistle();   // a single whistle here (no confusing multi-blow demo)
       }));
     // 2A.6 the ball-under-water rule — quiet demo, explained in the instruction box
-    steps.push(animatedWatch('A player in possession must be careful NOT to push the ball under the surface when an opponent is pressing close, like in this situation. Taking the ball under while holding it is an ordinary foul, and possession changes to the other team.',
+    steps.push(animatedWatch('A player in possession must be careful NOT to push the ball under the surface when an opponent is pressing close, like in this situation …',
       function(){ return ballUnderDemo(); }));
+    steps.push(watch('… taking the ball under while holding it is an ordinary foul, and possession changes to the other team.'));
     steps.push(watch('One exception: if the goalkeeper takes the ball under inside their own 6-metre zone, it is a penalty throw for the other team — we will explain penalties in more detail later.',
       ()=>{ /* no whistle, no headline — just the explanation */ }));
 
     // ---- BACK TO LESSON 2 — SCORING ----
-    steps.push(watch('The attacker moves toward the center to open a shot. A defender may hold ONE arm up to block the shot — but never both arms at the same time.',
-      ()=>{ setShooter(); setTimeout(()=>{ const s=PX._shooter; if(s) spotlightCircle(+s.dataset.x,+s.dataset.y,2.8,false); }, 950); }));
+    steps.push(watch('The attacker moves toward the center to open a shot, and the defender stays between him and the goal. A defender may hold ONE arm up to block the shot — but never both. The dotted lines show the shooter’s angle on the goal.',
+      ()=>{ setShooter(); setTimeout(()=>{ setShootingAngle(true); const s=PX._shooter; if(s) spotlightCircle(+s.dataset.x,+s.dataset.y,2.8,false); }, 1100); }));
 
     // 2.5 / 2.6 — SHOOT (live). Retry until a goal so the story continues.
     steps.push({
@@ -11401,22 +11462,24 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
 
     // 2.7 What is a goal — the parent drags the ball fully across the line
     steps.push({
-      instruction:'A goal counts only when the WHOLE ball crosses the goal line, between the posts and under the crossbar. Tap and drag the ball onto the ghost inside the net.',
+      instruction:'A goal counts only when the WHOLE ball crosses the goal line, between the posts and under the crossbar. Drag the ball forward across the goal line, onto the dark target.',
       bannerSide:'top', skipDimPhase:true, highlight:null,
       allowedSelectors:'#ball',   // exempt the ball from the interaction lock so it can be tapped/dragged
-      onEnter:function(){ PX._goalDragged=false; setShootingAngle(false);
-        PX.exitFrontCourt();   // zoom back out so the goal, the net and the ball's ghost are all visible
-        if(typeof ballCarrier!=='undefined') ballCarrier=null;   // keep the ball where the shot left it — on the line
-        const bx=(typeof ball!=='undefined'&&ball)?+ball.dataset.x:BLUE_GOAL.x;
+      onEnter:function(){ PX._goalDragged=false; setShootingAngle(false);   // stay in Front Court (zoomed in on the goal)
+        if(typeof ballCarrier!=='undefined') ballCarrier=null;
         const by=(typeof ball!=='undefined'&&ball)?+ball.dataset.y:CY;
-        const tgt={ x:BLUE_GOAL.x-1.1, y:by };                    // ghost target just inside the net
+        if(typeof ball!=='undefined'&&ball){ ball.dataset.x=BLUE_GOAL.x+1.4; ball.dataset.y=by; if(typeof placeBall==='function') placeBall(); }   // sit the ball just in FRONT of the line (distinct from the target)
+        const tgt={ x:BLUE_GOAL.x, y:by };                        // dark target ON the goal line
         showBallGhost(tgt.x, tgt.y);
-        const cx=(bx+tgt.x)/2, cy=(by+tgt.y)/2, r=Math.hypot(tgt.x-bx,tgt.y-by)/2 + 4;   // spotlight enclosing ball + ghost, enlarged
-        persistSpotlight(cx, cy, r);                              // PERSISTENT bigger vision circle so the ball on the line is easy to grab
-        armBallDrag('left', function(){ PX._goalDragged=true; hideBallGhost(); clearHoldCinematic(); PX.flash('GOAL!','goal'); });
+        persistSpotlight(BLUE_GOAL.x+0.7, by, 3.2);               // PERSISTENT vision circle around the ball + target
+        armBallDrag('left', function(){ PX._goalDragged=true; hideBallGhost(); clearHoldCinematic(); PX.flash('GOAL!','goal'); }, 0.1);   // completes on reaching the goal-line target
       },
       validate:{ type:'custom', fn:()=> PX._goalDragged===true }
     });
+
+    // 2.7b Substitution — one field player per team swims out and a fresh one swims in
+    steps.push(animatedWatch('Teams can substitute during the match. A field player swims out at the re-entry corner next to their own goal, and a fresh team-mate (not the goalkeeper) swims in to take their place.',
+      function(){ PX.exitFrontCourt(); return PX.substitutionDemo(); }));
 
     // 2.8 After the goal — kick-off, Blue possession (only starts once the parent confirms)
     steps.push(ackThenAnimate('After a goal, both teams move into their own half. The kick-off often starts from the middle of the pool, but it can start anywhere in the half of the team that has the ball. Blue was scored on, so Blue now has possession — and the referees swap responsibilities. Tap “Got it” to start the kick-off.',
@@ -11429,6 +11492,10 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       onEnter:function(){ PX._goalTapped=false; showGoalTapTargets(function(){ PX.flash('Correct — Blue attacks this way','good'); setTimeout(()=>{ PX._goalTapped=true; }, 2100); }); },
       validate:{ type:'custom', fn:()=> PX._goalTapped===true }
     });
+
+    // 2.9b Teams set up in the WHITE half (mirror of the earlier offense set-up) — full court
+    steps.push(animatedWatch('Now Blue attacks the white goal. The teams set up in the other half — Blue in attack, White defending each zone.',
+      function(){ PX.exitFrontCourt(); return PX.setupWhiteHalf(); }));
 
     // 2.10 The game clock
     steps.push(watch('A water polo game is divided into four periods.',
@@ -11546,18 +11613,19 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   PX.showWpEnd = function(kind){
     if(document.getElementById('pxEndScreen')) return;
     const ov=make('div'); ov.id='pxEndScreen';
+    // Same XquiX palette as the start screen (teal / grey / white).
     ov.style.cssText='position:fixed;inset:0;z-index:9800;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;color:#fff;'
-      +'background:radial-gradient(circle at 50% 40%, #0a4d8c 0%, #06305a 60%, #041f3d 100%);';
+      +'background:radial-gradient(circle at 50% 38%, #1b7373 0%, #0f4747 56%, #0b2b2b 100%);';
     const title=make('div'); title.textContent = kind==='complete' ? 'Water Polo — made easy!  You’ve finished the tutorial.' : 'Leave the tutorial?';
     title.style.cssText='font:900 clamp(22px,5.5vw,40px)/1.2 system-ui;margin-bottom:24px;max-width:92%;';
     ov.appendChild(title);
     const row=make('div'); row.style.cssText='display:flex;gap:14px;flex-wrap:wrap;justify-content:center;';
     const restart=make('button'); restart.textContent='Restart tutorial';
-    restart.style.cssText='font:800 18px system-ui;color:#06305a;background:#ffd23f;border:none;border-radius:999px;padding:14px 34px;cursor:pointer;';
+    restart.style.cssText='font:800 18px system-ui;color:#fff;background:#1b7373;border:2px solid #4bb8bd;border-radius:999px;padding:14px 34px;cursor:pointer;';
     restart.addEventListener('click', ()=>{ ov.remove(); PX.restartWp(); });
     row.appendChild(restart);
     if(kind!=='complete'){ const back=make('button'); back.textContent='Keep going';
-      back.style.cssText='font:800 18px system-ui;color:#fff;background:rgba(255,255,255,.18);border:none;border-radius:999px;padding:14px 34px;cursor:pointer;';
+      back.style.cssText='font:800 18px system-ui;color:#0b2b2b;background:#4bb8bd;border:none;border-radius:999px;padding:14px 34px;cursor:pointer;';
       back.addEventListener('click', ()=>{ ov.remove(); PX.showNav(); }); row.appendChild(back); }
     ov.appendChild(row);
     document.body.appendChild(ov);
