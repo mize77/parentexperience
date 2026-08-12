@@ -11483,15 +11483,24 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     wrap.appendChild(ball);
     document.body.appendChild(wrap);
     let dragging=false, done=false;
+    const TWO_R=2*R;
     function local(e){ const r=wrap.getBoundingClientRect(); return { x:e.clientX-r.left, y:e.clientY-r.top }; }
+    // Area-overlap fraction of two equal circles (radius R) whose centres are d apart.
+    function coverFrac(d){ if(d<=0) return 1; if(d>=TWO_R) return 0; const x=d/TWO_R; return (2/Math.PI)*(Math.acos(x) - x*Math.sqrt(1-x*x)); }
+    function finish(){ if(done) return; done=true; dragging=false;
+      ball.style.transition='left .18s ease, top .18s ease'; ball.style.left=ghostCx+'px'; ball.style.top=ghostCy+'px';
+      cleanup(); setTimeout(()=>{ PX.hideGoalZoom(); if(onDone) onDone(); }, 220); }
+    // Confirm the MOMENT the whole ball is in the cage (fully across the line)
+    // AND it covers the ghost by at least 90% — no need to lift the finger.
+    function tryComplete(){ if(done) return false;
+      const bx=parseFloat(ball.style.left), by=parseFloat(ball.style.top);
+      const fullyCrossed = (bx + R) <= (lineXpx - 1);                 // whole ball past the line, inside the goal
+      const d=Math.hypot(bx-ghostCx, by-ghostCy);
+      if(fullyCrossed && coverFrac(d) >= 0.90){ finish(); return true; }
+      return false; }
     function down(e){ if(done) return; e.preventDefault(); e.stopPropagation(); dragging=true; try{ ball.setPointerCapture(e.pointerId); }catch(_){} }
-    function move(e){ if(!dragging) return; const q=local(e); const x=Math.max(10,Math.min(D-10,q.x)), y=Math.max(10,Math.min(D-10,q.y)); ball.style.left=x+'px'; ball.style.top=y+'px'; }
-    function upH(e){ if(!dragging) return; dragging=false; const x=parseFloat(ball.style.left);
-      if(x + R <= lineXpx - 1){   // the WHOLE ball has crossed the line (trailing edge just past it, not touching) -> a goal
-        done=true; ball.style.transition='left .22s ease, top .22s ease'; ball.style.left=ghostCx+'px'; ball.style.top=ghostCy+'px';
-        cleanup(); setTimeout(()=>{ PX.hideGoalZoom(); if(onDone) onDone(); }, 260);
-      }
-    }
+    function move(e){ if(!dragging) return; const q=local(e); const x=Math.max(10,Math.min(D-10,q.x)), y=Math.max(10,Math.min(D-10,q.y)); ball.style.left=x+'px'; ball.style.top=y+'px'; tryComplete(); }
+    function upH(e){ if(!dragging) return; dragging=false; tryComplete(); }
     function cleanup(){ ball.removeEventListener('pointerdown',down); document.removeEventListener('pointermove',move,true); document.removeEventListener('pointerup',upH,true); }
     wrap._cleanup=cleanup;
     ball.addEventListener('pointerdown',down); document.addEventListener('pointermove',move,true); document.addEventListener('pointerup',upH,true);
@@ -11721,15 +11730,22 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       const h=function(ev){ if(ev){ ev.preventDefault(); ev.stopPropagation(); } if(b._pxLock) return; b._pxLock=true; setTimeout(()=>{ b._pxLock=false; }, 400); if(typeof fn==='function') fn(); };
       b.addEventListener('pointerup',h); b.addEventListener('click',h); return b; };
     nav.appendChild(mk('Exit tutorial','#8a3a3a', PX.exitWp));
-    nav.appendChild(mk('Next step →','#37474f', PX.skipStep));   // escape hatch: auto-complete the current step and move on
+    // A single split control: ◀ Previous step | Next step ▶ — jump back to
+    // re-read/redo a step, or skip forward if something did not register.
+    const row=make('div'); row.style.cssText='display:flex;border-radius:10px;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.3);';
+    const half=(label,fn,extra)=>{ const b=make('button'); b.textContent=label;
+      b.style.cssText='flex:1 1 0;font:700 13px system-ui;color:#fff;background:#37474f;border:none;padding:10px 14px;cursor:pointer;text-align:center;white-space:nowrap;touch-action:manipulation;pointer-events:auto;'+(extra||'');
+      const h=function(ev){ if(ev){ ev.preventDefault(); ev.stopPropagation(); } if(b._pxLock) return; b._pxLock=true; setTimeout(()=>{ b._pxLock=false; }, 400); if(typeof fn==='function') fn(); };
+      b.addEventListener('pointerup',h); b.addEventListener('click',h); return b; };
+    row.appendChild(half('← Previous step', PX.prevStep, 'border-right:1px solid rgba(255,255,255,.28);'));
+    row.appendChild(half('Next step →', PX.skipStep));
+    nav.appendChild(row);
     nav.appendChild(mk('Move to next lesson →','#1a6363', PX.nextLesson));
     document.body.appendChild(nav);
   };
-  // Escape hatch — the current step is never a dead end: clean up any live
-  // interaction (shoot / tap / choice / goal-zoom / follow / selection) and
-  // advance to the next step, so the parent is never stuck if a drag or tap
-  // does not register.
-  PX.skipStep = function(){
+  // Clean up any live interaction (shoot / tap / choice / goal-zoom / follow /
+  // selection / flash) so jumping between steps never leaves a widget behind.
+  PX._cleanupStepUI = function(){
     try{ if(PX.shoot && PX.shoot.cancel) PX.shoot.cancel(); }catch(e){}
     try{ if(PX.tap && PX.tap.disarm) PX.tap.disarm(); }catch(e){}
     try{ if(PX.choice && PX.choice.clear) PX.choice.clear(); }catch(e){}
@@ -11738,9 +11754,22 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     try{ stopFollow(); }catch(e){}
     try{ setShootingAngle(false); }catch(e){}
     try{ PX.clearSelections(); }catch(e){}
+    try{ qa('[data-px="goaltap"]').forEach(e=>e.remove()); }catch(e){}
     try{ if(PX.clearFlash) PX.clearFlash(); }catch(e){}
+  };
+  // Escape hatch — the current step is never a dead end: advance one step so the
+  // parent is never stuck if a drag or tap does not register.
+  PX.skipStep = function(){
+    PX._cleanupStepUI();
     const cur=(typeof tutorialStepIndex!=='undefined')?tutorialStepIndex:0;
     if(typeof goToTutorialStep==='function') goToTutorialStep(cur+1);
+  };
+  // Step back one step to re-read or redo it (its scene rebuilds from onEnter).
+  PX.prevStep = function(){
+    PX._cleanupStepUI();
+    const cur=(typeof tutorialStepIndex!=='undefined')?tutorialStepIndex:0;
+    if(cur>0 && typeof goToTutorialStep==='function') goToTutorialStep(cur-1);
+    else PX.flash('You’re at the very beginning','',1400);
   };
   PX.hideNav = function(){ const n=document.getElementById('pxNav'); if(n) n.remove(); };
   PX.nextLesson = function(){
