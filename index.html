@@ -10850,11 +10850,10 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     const cW={ x:BLUE_GOAL.x+2.5, y:CY };
     const cWrot=faceTo(cW.x,cW.y, ballCarrierPt.x,ballCarrierPt.y);
     anims.push(swimSettle(centerWhite, cW, 5000, cWrot, 'v'));
-    // Blue center defender hugs directly behind the center forward, horizontal,
-    // legs angled to the attacker's right (defender at the center's back).
+    // Blue center defender vs the white center forward — a live duel (both face the
+    // ball; defender horizontal behind, vertical if the center gets the ball).
     const blueCenterDef = blues.filter(b=>usedBlue.indexOf(b)<0)[0];
-    const hug=hugCenterSpot({dataset:{x:cW.x,y:cW.y}}, BLUE_GOAL);
-    anims.push(swimSettle(blueCenterDef, {x:hug.x,y:hug.y}, 5000, hug.rot, 'h'));
+    PX.setCenterDuel(centerWhite, blueCenterDef, BLUE_GOAL); PX.centerDuel(true);
 
     // Goalkeepers
     const bgk=blueGoalie(), wgk=whiteGoalie();
@@ -10887,10 +10886,9 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     });
     const cB={ x:WHITE_GOAL.x-2.5, y:CY }, ballPt=zoneCentroidRight('z4');
     if(centerBlue) anims.push(swimSettle(centerBlue, cB, 3500, faceTo(cB.x,cB.y, ballPt.x,ballPt.y), 'v'));
-    // White center defender hugs directly behind the blue center forward,
-    // horizontal, legs angled to the attacker's right (toward the white goal).
+    // White center defender vs the blue center forward — a live duel.
     const centerWhite=whites.filter(w=>usedWhite.indexOf(w)<0)[0];
-    if(centerWhite){ const hug=hugCenterSpot({dataset:{x:cB.x,y:cB.y}}, WHITE_GOAL); anims.push(swimSettle(centerWhite, {x:hug.x,y:hug.y}, 3500, hug.rot, 'h')); }
+    if(centerBlue && centerWhite){ PX.setCenterDuel(centerBlue, centerWhite, WHITE_GOAL); PX.centerDuel(true); }
     const wgk=whiteGoalie(), bgk=blueGoalie();
     if(wgk) anims.push(swimVerticalTrack(wgk, {x:WHITE_GOAL.x-0.6, y:CY}, 3500, ballPt));   // white GK defends the right goal
     if(bgk) anims.push(swimSettle(bgk, {x:BLUE_GOAL.x+4, y:CY}, 3500, 90, 'h'));
@@ -11258,17 +11256,38 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   // behind the attacker (goal-side), hugging close, HORIZONTAL, with its legs
   // angled diagonally to the attacker's RIGHT. Returns the settle spot+rot so
   // callers can swim or place the defender there.
-  function hugCenterSpot(attacker, goal){
-    const ax=+attacker.dataset.x, ay=+attacker.dataset.y;
-    const gx=(goal&&goal.x!=null)?goal.x:BLUE_GOAL.x, gy=(goal&&goal.y!=null)?goal.y:CY;
-    let dx=gx-ax, dy=gy-ay; const dl=Math.hypot(dx,dy)||1; dx/=dl; dy/=dl;   // attacker -> goal
-    const spot={ x:ax+dx*0.55, y:ay+dy*0.55 };                              // hug 0.55 m behind
-    const fx=-dx, fy=-dy;                                                   // attacker faces OUT (away from goal)
-    const rx=-fy, ry=fx;                                                    // attacker's RIGHT (screen y is down)
-    let lx=rx*0.7+dx*0.7, ly=ry*0.7+dy*0.7; const ll=Math.hypot(lx,ly)||1; lx/=ll; ly/=ll;  // legs: diagonal right + back
-    const rot=faceTo(spot.x,spot.y, spot.x-lx, spot.y-ly);                  // head points opposite the legs
-    return { x:spot.x, y:spot.y, rot:rot };
+  // The center forward and the center defender are in a constant duel. Both always
+  // face the ball. The defender hugs directly behind the attacker (goal-side); it
+  // stays HORIZONTAL while marking, but turns VERTICAL the moment the attacker has
+  // the ball (blocking the shot). This helper returns the defender's spot/pose/rot.
+  function centerDefSpot(atkPos, goal, ballPt, hasBall){
+    const ax=atkPos.x, ay=atkPos.y;
+    let dx=goal.x-ax, dy=goal.y-ay; const dl=Math.hypot(dx,dy)||1; dx/=dl; dy/=dl;   // attacker -> goal
+    const spot={ x:ax+dx*0.55, y:ay+dy*0.55 };                                        // hug 0.55 m behind
+    const bp=ballPt||{x:MID_X,y:CY};
+    return { x:spot.x, y:spot.y, rot:faceTo(spot.x,spot.y, bp.x,bp.y), pose: hasBall?'v':'h' };
   }
+  // Register / drive the live center duel. The ticker keeps the defender marking the
+  // (possibly moving) center forward, both facing the ball, switching h<->v as the
+  // center gains/loses the ball. Runs during all offense/defense setups.
+  PX._duel = null;
+  PX.setCenterDuel = function(atk, def, goal){ PX._duel = (atk&&def&&goal) ? { atk:atk, def:def, goal:{x:goal.x,y:goal.y} } : null; };
+  PX.centerDuel = function(on){
+    if(PX._duelTimer){ clearInterval(PX._duelTimer); PX._duelTimer=null; }
+    if(!on) return;
+    PX._duelTimer=setInterval(function(){ try{
+      const d=PX._duel; if(!d) return; const atk=d.atk, def=d.def;
+      if(!atk||!def||!atk.isConnected||!def.isConnected) return;
+      const bp=ballObj();
+      atk.dataset.rot=faceTo(+atk.dataset.x,+atk.dataset.y, bp.x,bp.y);           // center forward faces the ball
+      const hasBall=(typeof ballCarrier!=='undefined' && ballCarrier===atk);
+      const s=centerDefSpot({x:+atk.dataset.x,y:+atk.dataset.y}, d.goal, bp, hasBall);
+      const cx=+def.dataset.x, cy=+def.dataset.y;
+      def.dataset.x=cx+(s.x-cx)*0.3; def.dataset.y=cy+(s.y-cy)*0.3;               // ease into the hug (marks a swimming center)
+      def.dataset.pose=s.pose; def.dataset.rot=faceTo(+def.dataset.x,+def.dataset.y, bp.x,bp.y);
+      if(typeof place==='function'){ place(atk); place(def); }
+    }catch(e){} }, 140);
+  };
   // Put the shooter at a clear angle to the goal so a near corner is genuinely
   // open past the centered keeper (teaches "aim where the keeper isn't").
   // Pass the ball to a receiver while the goalkeeper follows the moving ball.
@@ -11379,13 +11398,15 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       blues.push(makePlayer(['B'+(i+1),'blue', dp.x, dp.y, 'v', faceTo(dp.x,dp.y, c.x,c.y)]));
     });
     const cW={x:BLUE_GOAL.x+2.5,y:CY};
-    whites.push(makePlayer(['W6','white', cW.x, cW.y, 'v', faceTo(cW.x,cW.y, ballPt.x,ballPt.y)]));
-    // Blue center defender hugs behind the white center, horizontal, legs to the right.
-    const hug=hugCenterSpot({dataset:{x:cW.x,y:cW.y}}, BLUE_GOAL);
-    blues.push(makePlayer(['B6','blue', hug.x, hug.y, 'h', hug.rot]));
+    const w6=makePlayer(['W6','white', cW.x, cW.y, 'v', faceTo(cW.x,cW.y, ballPt.x,ballPt.y)]); whites.push(w6);
+    // Blue center defender vs the white center — placed at the marking spot and put
+    // into a live duel (both face the ball; h behind, v if the center gets the ball).
+    const cds=centerDefSpot(cW, BLUE_GOAL, ballPt, false);
+    const b6=makePlayer(['B6','blue', cds.x, cds.y, cds.pose, cds.rot]); blues.push(b6);
     makePlayer(['BG','goalie', BLUE_GOAL.x+0.6, CY, 'v', faceTo(BLUE_GOAL.x+0.6,CY, ballPt.x,ballPt.y)]);
     makePlayer(['WG','goalie', WHITE_GOAL.x-4, CY, 'h', 270]);
     if(typeof moveBallTo==='function') moveBallTo(whites[3], 'right');
+    PX.setCenterDuel(w6, b6, BLUE_GOAL); PX.centerDuel(true);
   };
 
   // Nearest blue defender to a given player.
@@ -11854,8 +11875,9 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       ring.style.cssText='position:fixed;z-index:9302;pointer-events:none;border:3px solid #e8362a;border-radius:14px;box-shadow:0 0 0 6px rgba(232,54,42,.28), 0 0 0 3000px rgba(6,20,35,.28);animation:pxGoalPulse 1.1s ease-in-out infinite;';
       document.body.appendChild(ring); }
     const r=sc.getBoundingClientRect(); const pad=8; ring.style.left=(r.left-pad)+'px'; ring.style.top=(r.top-pad)+'px'; ring.style.width=(r.width+pad*2)+'px'; ring.style.height=(r.height+pad*2)+'px'; ring.style.display='block';
-    if(PX._scHiT) clearTimeout(PX._scHiT); PX._scHiT=setTimeout(()=>{ const e=document.getElementById('pxSCHi'); if(e) e.remove(); }, ms||3400);
+    if(PX._scHiT) clearTimeout(PX._scHiT); if(ms>0) PX._scHiT=setTimeout(()=>{ const e=document.getElementById('pxSCHi'); if(e) e.remove(); }, ms);   // ms<=0 => persistent until cleared
   };
+  PX.clearShotClockHighlight = function(){ if(PX._scHiT){ clearTimeout(PX._scHiT); PX._scHiT=null; } const e=document.getElementById('pxSCHi'); if(e) e.remove(); };
   function capNumOf(el){ const n=el&&el.querySelector?el.querySelector('.capNumber'):null; return n?n.textContent:''; }
   function blueByCap(cap){ return blueFields().find(p=>capNumOf(p)===String(cap)) || null; }
   function whiteByCap(cap){ return whiteFields().find(p=>capNumOf(p)===String(cap)) || null; }
@@ -11881,13 +11903,18 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     const steps=[];
     let intDef=null, intTarget=null, intPasser=null, l3Center=null;
 
-    // 3.1 (Step 47) New possession — Blue attacks the white goal. FIRST the shot
-    // clock blends in with a spotlight + red frame (banner hidden), THEN the
-    // instruction appears; on "Got it" the teams swim over and the clock runs down.
-    steps.push(ackThenAnimatePreview('A team cannot keep the ball forever. Each new possession starts with a shot clock — up to 28 seconds to create a shot. It runs whenever the ball is in play and only pauses for a foul or after a goal. The view follows the play automatically; you can also swipe along the screen edges to look around.',
+    // 3.1a (Step 47) New possession. FIRST the shot clock blends in with a spotlight +
+    // red frame (banner hidden), THEN box 1 appears. The red frame stays through box 2.
+    steps.push(ackThenAnimatePreview('A team cannot keep the ball forever. Each new possession starts with a shot clock — up to 28 seconds to create a shot. It runs whenever the ball is in play and only pauses for a foul or after a goal.',
       function(){ PX.enterFrontCourt(); PX.hideShotClock(); PX.followBall(false);
-        PX.showShotClock(28); PX.highlightShotClock(4200); PX.flash('SHOT CLOCK — 28',''); },   // spotlight + red frame land first
-      function(){ PX.enterFrontCourt(); PX.followBall(true);
+        PX.showShotClock(28); PX.highlightShotClock(-1); PX.flash('SHOT CLOCK — 28',''); },   // persistent spotlight + red frame
+      function(){ /* box 1 just needs the confirm; the swim starts after box 2 */ }));
+
+    // 3.1b (Step 48) Box 2 — the view-follows note. On confirm the red frame vanishes
+    // and the teams swim over while the clock runs down (double speed) to ~19.
+    steps.push(ackThenAnimate('For your better experience, the view follows the play automatically. If needed you can also swipe along the screen edges to look around.',
+      function(){ PX.clearShotClockHighlight();   // the red frame vanishes the moment they start swimming
+        PX.enterFrontCourt(); PX.followBall(true);
         PX.tickShotClock(28, 19, 500);   // alive and running at double speed as the teams swim over -> ~19 when set up
         return PX.setupWhiteHalf().then(()=>{ PX.centerOnBall(); }); }));
 
@@ -11920,7 +11947,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     steps.push({
       instruction:'The ball is worked around to open a better angle. When you see the chance, tap SHOOT.',
       bannerSide:'top', skipDimPhase:true, highlight:null, allowedSelectors:['#pxL3ShootBtn'],
-      onEnter:function(){ PX.enterFrontCourt(); PX.followBall(true); PX._l3save=false; PX.setShotClock(12);
+      onEnter:function(){ PX.enterFrontCourt(); PX.followBall(true); PX._l3save=false; PX.tickShotClock(18, 12, 360);   // runs DOWN 18->12 during the passing (no jump)
         const seq=[ blueByCap(7), blueByCap(4), blueByCap(2) ].filter(Boolean);
         passSeqSmartGK(seq.length?seq:blueFields().slice(0,3)).then(()=>{ PX.followBall(false); PX.centerOnBall(); PX.shootButton(resolveSave2); });
       },
@@ -11933,10 +11960,10 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       bannerSide:'top', skipDimPhase:true, highlight:null,
       onEnter:function(){ PX._l3q=false;
         PX.choice.ask({ options:[{label:'BLUE',value:'blue'},{label:'WHITE',value:'white'}], correct:'white',
-          onAnswer:function(v,ok){ if(ok){ PX.choice.clear(); PX.flash('Correct — the goalkeeper controlled it,\nso White begins a new possession.','good'); PX.showShotClock(28); setTimeout(()=>{ PX._l3q=true; }, 2000); } } });
+          onAnswer:function(v,ok){ if(ok){ PX.choice.clear(); PX.flash('Correct — the goalkeeper controlled it, so White\nbegins a new possession — shot clock reset to 28.','good'); PX.showShotClock(28); setTimeout(()=>{ PX._l3q=true; }, 2000); } } });
       },
       validate:{ type:'custom', fn:()=> PX._l3q===true },
-      autoComplete:function(){ PX.choice.clear(); PX.flash('Correct — White begins a new possession','good'); PX.showShotClock(28); setTimeout(()=>{ PX._l3q=true; }, 1500); }
+      autoComplete:function(){ PX.choice.clear(); PX.flash('Correct — White begins a new possession,\nshot clock reset to 28.','good'); PX.showShotClock(28); setTimeout(()=>{ PX._l3q=true; }, 1500); }
     });
 
     // 3.6 (Step 53) YOU TRY — interception. Both teams swim DOWN the pool and set
@@ -11975,7 +12002,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       });
       if(centerW){ const cW={ x:BLUE_GOAL.x+2.5, y:CY }; const bp=zoneCentroid('z4');
         anims.push(swimSettle(centerW, cW, 2600, faceTo(cW.x,cW.y, bp.x,bp.y), 'v'));
-        const cd=blues.filter(b=>usedB.indexOf(b)<0)[0]; if(cd){ const hug=hugCenterSpot({dataset:{x:cW.x,y:cW.y}}, BLUE_GOAL); anims.push(swimSettle(cd, {x:hug.x,y:hug.y}, 2600, hug.rot, 'h')); } }
+        const cd=blues.filter(b=>usedB.indexOf(b)<0)[0]; if(cd){ PX.setCenterDuel(centerW, cd, BLUE_GOAL); PX.centerDuel(true); } }
       if(bgk) anims.push(swimVerticalTrack(bgk, {x:BLUE_GOAL.x+0.6, y:CY}, 2600, zoneCentroid('z4')));   // Blue GK swims back to its goal
       if(wgk) anims.push(swimSettle(wgk, {x:WHITE_GOAL.x-4, y:CY}, 2600, 270, 'h'));
       // Ball routing: GK -> right wing (at the middle line) -> the wing carries it to
@@ -12012,6 +12039,10 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
           PX.clearSelections(); if(typeof setSelected==='function') setSelected(def, true);
           spotlightBetween(p2.x,p2.y,p3.x,p3.y,false);   // ONE red circle enclosing White #2 (ball) and White #3
           step53.ghost={ type:'playerPosition', targetPlayer:{ team:def.dataset.team, pose:def.dataset.pose, rot:+def.dataset.rot||0, x:intTarget.x, y:intTarget.y, label:def.dataset.label } };
+          // The engine renders the ghost synchronously at step entry — but this ghost
+          // is only known AFTER the swim, so render it explicitly now (that is why it
+          // was invisible before).
+          if(typeof renderTutorialGhost==='function') renderTutorialGhost(step53.ghost);
         });
       },
       validate:{ type:'custom', fn:function(){ if(!intDef||!intTarget) return false; return Math.hypot((+intDef.dataset.x)-intTarget.x, (+intDef.dataset.y)-intTarget.y) <= 1.3; } },
@@ -12058,9 +12089,10 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
         return delay(3300).then(()=>{ PX.flash('SHOT CLOCK EXPIRED','whistle',1500);
           return delay(1100).then(()=>{ if(typeof PX.whistle==='function'){ try{ PX.whistle(); }catch(e){} } PX.flash('WHISTLE','whistle',1300); }); }); }));
 
-    // 3.7b (Step 57) Turnover — the nearest White player MUST swim to the ball, take
-    // possession and continue the play, which starts the shot clock again.
-    steps.push(animatedWatch('The ball turns over to White. The nearest White player must swim to the ball, take possession and continue the play — which starts the shot clock again.',
+    // 3.7b (Step 57) Turnover + the rule, combined. The nearest White player MUST swim
+    // to the ball, take possession and continue the play — which restarts the clock at
+    // a new 28. (Exception: a player already ahead of the ball keeps breaking away.)
+    steps.push(animatedWatch('The ball turns over to White. The player closest to the ball must swim to it, take possession and continue the play — which starts the shot clock again at a new 28 seconds. (If a player were already ahead of the ball, breaking toward the other goal, he would carry on instead of turning back for it.)',
       function(){ PX.followBall(true);
         return (async function(){
           const bx=(typeof ball!=='undefined'&&ball)?+ball.dataset.x:MID_X, by=(typeof ball!=='undefined'&&ball)?+ball.dataset.y:CY;
@@ -12075,11 +12107,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
         })();
       }));
 
-    // 3.7c (Step 58) The rule behind the turnover (and the clock's new 28 seconds).
-    steps.push(watch('The shot clock is set to a new 28 seconds for White. When the clock runs out, the player closest to the ball must take it — unless he is already ahead of the ball, breaking toward the other goal on the attack; then he keeps going rather than turning back for it.',
-      ()=>{ PX.followBall(false); }));
-
-    // 3.8 (Step 59) Lesson 3 wrap-up — LESSON 3 COMPLETE headline FIRST, then the bullets.
+    // 3.8 (Step 58) Lesson 3 wrap-up — LESSON 3 COMPLETE headline FIRST, then the bullets.
     steps.push(watchLeadFlash('UNDERSTAND\n• Every possession has a shot clock — up to 28 seconds to get a shot away.\n• The clock runs while the ball is in play and pauses only for a foul or after a goal.\n• Keeping the ball (like an offensive rebound) resets it to 18 seconds — unless more time was left.\n• A blocked-and-controlled save, an interception, or the clock expiring all turn the ball over.\n• On a turnover the nearest player takes the ball — unless he is already breaking away on attack.',
       'LESSON 3 COMPLETE', 'good', ()=>{ PX.followBall(false); PX.hideShotClock(); }));
 
@@ -12088,6 +12116,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
 
   /* --------------------------------------- swim-off choreography (promise) */
   async function runSwimOff(){
+    PX.centerDuel(false); PX.setCenterDuel(null,null,null);   // no offense/defense duel during the swim-off
     PX.clearSelections();   // drop the swim-off drag selection so the D-pad hides
     const b = { x:MID_X, y:CY };
     const wC = whiteCenter(), bC = blueCenter();
@@ -12329,7 +12358,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     PX.exitFrontCourt();   // always start in full court (swim-off uses the whole pool)
     PX.field.setPhase('water');
     PX._swimDone=false; PX._setupDone=false; PX._gkTapped=false; PX._zonesActive=false; PX._snapshots={};
-    PX.hideShotClock(); PX.followBall(false);
+    PX.hideShotClock(); PX.followBall(false); PX.centerDuel(false); PX.setCenterDuel(null,null,null);
     const l1=PX.buildLesson1Steps(), l2=PX.buildLesson2Steps(), l3=PX.buildLesson3Steps();
     PX._lessonStarts=[0, l1.length, l1.length+l2.length];   // Lesson 2 / Lesson 3 start offsets
     const allSteps = wrapBannerReset([].concat(l1, l2, l3));
