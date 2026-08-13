@@ -11014,7 +11014,8 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
           step19a.ghost={ type:'playerPosition', targetPlayer:{ team:w.dataset.team, pose:w.dataset.pose, rot:+w.dataset.rot||0, x:tx, y:ty, label:w.dataset.label } };
           spotlightBetween(+w.dataset.x, +w.dataset.y, tx, ty, false); }   // ONE circle around player + ghost
       },
-      validate:{ type:'custom', fn:function(){ const w=whiteCenter(); if(!w) return false; return (+w.dataset.x) <= 22.6; } }   // reached the 5m line
+      validate:{ type:'custom', fn:function(){ const w=whiteCenter(); if(!w) return false; return (+w.dataset.x) <= 22.6; } },   // reached the 5m line
+      autoComplete:function(){ const w=whiteCenter(); if(w){ swim(w, {x:22, y:CY}, 700); } PX.clearSelections(); }   // Next: swim the player onto the 5m line, visibly
     };
     steps.push(step19a);
 
@@ -11052,7 +11053,8 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
           onWrong:function(hit){ if(hit.player && hit.player.dataset.team==='goalie') PX.flash('That’s the White goalkeeper — tap the Blue one','',1200); else if(hit.player) PX.flash('That’s a field player — the goalkeeper is highlighted','',1200); }
         });
       },
-      validate:{ type:'custom', fn:()=> PX._gkTapped===true }
+      validate:{ type:'custom', fn:()=> PX._gkTapped===true },
+      autoComplete:function(){ const g=blueGoalie(); if(g) g.classList.add('selected'); PX.tap.disarm(); PX.flash('Correct — the goalkeeper','good'); setTimeout(()=>{ PX._gkTapped=true; }, 1600); }   // Next: highlight the Blue keeper as the answer
     });
 
     // 1.12 UNDERSTAND — learning points as a bullet list
@@ -11066,10 +11068,6 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   // scene's own onEnter then hides it and it fades back 0.5s later.
   function wrapBannerReset(steps){
     steps.forEach(s=>{ const orig=s.onEnter; s.onEnter=function(){
-      // Snapshot the scene AS IT IS before this step's onEnter changes it — i.e.
-      // the settled end of the previous step. Keyed by the step being entered, so
-      // Previous can restore the exact pre-step scene and re-run onEnter from it.
-      try{ if(typeof tutorialStepIndex!=='undefined' && tutorialStepIndex>=0){ PX._snapshots=PX._snapshots||{}; PX._snapshots[tutorialStepIndex]=PX._captureScene(); } }catch(e){}
       const bn=document.getElementById('tutorialBanner'); if(bn) bn.style.opacity='1'; if(PX._bannerT) clearTimeout(PX._bannerT); if(typeof orig==='function') orig.call(this); }; });
     return steps;
   }
@@ -11595,7 +11593,8 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
           spotlightBetween(sx, sy, tx, ty, false);   // ONE circle around player + ghost
         }
       },
-      validate:{ type:'custom', fn:function(){ if(!drivePlayer||!driveTarget) return false; return Math.hypot((+drivePlayer.dataset.x)-driveTarget.x,(+drivePlayer.dataset.y)-driveTarget.y) <= 0.8; } }
+      validate:{ type:'custom', fn:function(){ if(!drivePlayer||!driveTarget) return false; return Math.hypot((+drivePlayer.dataset.x)-driveTarget.x,(+drivePlayer.dataset.y)-driveTarget.y) <= 0.8; } },
+      autoComplete:function(){ if(drivePlayer && driveTarget){ swim(drivePlayer, {x:driveTarget.x, y:driveTarget.y}, 700); } PX.clearSelections(); }   // Next: ease the attacker back onto the ghost, visibly
     };
     steps.push(step22);
 
@@ -11627,7 +11626,8 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
         PX.choice.ask({ options:[{label:'YES',value:'yes'},{label:'NO',value:'no'}], correct:'no',
           onAnswer:function(v,ok){ if(ok){ PX.choice.clear(); clearHoldCinematic(); PX.flash('Correct — he has released the ball,\nso he is not in possession.','good'); setTimeout(()=>{ PX._bnbDone=true; }, 2100); } } });   // let the green headline hold 2s before advancing
       },
-      validate:{ type:'custom', fn:()=> PX._bnbDone===true }
+      validate:{ type:'custom', fn:()=> PX._bnbDone===true },
+      autoComplete:function(){ PX.choice.clear(); clearHoldCinematic(); PX.flash('Correct — he has released the ball,\nso he is not in possession.','good'); setTimeout(()=>{ PX._bnbDone=true; }, 1800); }   // Next: reveal the correct answer (NO)
     });
     // 2A.5 rough / illegal play — how fouls are signalled with the whistle
     steps.push(watch('Unnecessarily rough or illegal play can be punished with an ordinary foul or an exclusion (explained in more detail later). An ordinary foul is usually signalled by a single whistle blow; an exclusion by a combination of two or three stronger whistles.',
@@ -11650,7 +11650,8 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       instruction:'Tap the marked spot on the goal line as your target, then press SHOOT.',
       bannerSide:'top', skipDimPhase:true, highlight:null,
       onEnter:function(){ PX._goalScored=false; clearHoldCinematic(); beginParentShot(); },
-      validate:{ type:'custom', fn:()=> PX._goalScored===true }
+      validate:{ type:'custom', fn:()=> PX._goalScored===true },
+      autoComplete:function(){ if(PX.shoot&&PX.shoot.cancel) PX.shoot.cancel(); setShootingAngle(false); PX.flash('GOAL!','goal'); setTimeout(()=>{ PX._goalScored=true; }, 900); }   // Next: score it for them
     });
 
     // 2.7 What is a goal — a zoomed-in close-up of the goal line (the net isn't
@@ -11664,7 +11665,8 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
         PX.clearFlash();   // drop any lingering headline flash (e.g. the shoot step's "Tap the marked spot")
         showGoalZoomDrag(function(){ PX._goalDragged=true; PX.flash('GOAL!','goal'); });
       },
-      validate:{ type:'custom', fn:()=> PX._goalDragged===true }
+      validate:{ type:'custom', fn:()=> PX._goalDragged===true },
+      autoComplete:function(){ const zb=document.getElementById('pxZoomBall'), zg=document.getElementById('pxZoomGhost'); if(zb&&zg){ zb.style.transition='left .4s ease, top .4s ease'; zb.style.left=zg.style.left; zb.style.top=zg.style.top; } PX.flash('GOAL!','goal'); setTimeout(()=>{ PX.hideGoalZoom(); PX._goalDragged=true; }, 560); }   // Next: slide the ball into the goal, visibly
     });
 
     // 2.8 After the goal — the full-court kick-off is set up on enter (both teams
@@ -11683,7 +11685,8 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       instruction:'Blue now has the ball. Tap the goal that Blue is attacking.',
       bannerSide:'top', skipDimPhase:true, highlight:null,
       onEnter:function(){ PX._goalTapped=false; showGoalTapTargets(function(){ PX.flash('Correct — Blue attacks this way','good'); setTimeout(()=>{ PX._goalTapped=true; }, 2100); }); },
-      validate:{ type:'custom', fn:()=> PX._goalTapped===true }
+      validate:{ type:'custom', fn:()=> PX._goalTapped===true },
+      autoComplete:function(){ qa('[data-px="goaltap"]').forEach(e=>e.remove()); pulseGoal('right','#1565c0',1400); PX.flash('Correct — Blue attacks this way','good'); setTimeout(()=>{ PX._goalTapped=true; }, 1800); }   // Next: point out the White goal
     });
 
     // 2.9b Teams set up in the WHITE half (mirror of the earlier offense set-up) — full court
@@ -11838,24 +11841,17 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     if(document.getElementById('pxNav')) return;
     const nav=make('div'); nav.id='pxNav';
     nav.style.cssText='position:fixed;left:10px;bottom:10px;z-index:9400;display:flex;flex-direction:column;gap:5px;';
-    // Compact controls (about half the previous size). Only Exit + the
-    // Previous/Next split are here; "Move to next lesson" (rarely needed) is
-    // offered inside the Exit dialog instead.
+    // Compact controls (about half the previous size). Only Exit + Next.
+    // (The Previous button was removed — it caused more confusion than it saved.
+    // "Move to next lesson" lives inside the Exit dialog.)
     const mk=(label,bg,fn)=>{ const b=make('button'); b.textContent=label;
-      b.style.cssText='font:700 11px system-ui;color:#fff;background:'+bg+';border:none;border-radius:8px;padding:5px 10px;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.28);text-align:left;touch-action:manipulation;pointer-events:auto;';
-      const h=function(ev){ if(ev){ ev.preventDefault(); ev.stopPropagation(); } if(b._pxLock) return; b._pxLock=true; setTimeout(()=>{ b._pxLock=false; }, 400); if(typeof fn==='function') fn(); };
+      b.style.cssText='font:700 11px system-ui;color:#fff;background:'+bg+';border:none;border-radius:8px;padding:5px 12px;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.28);text-align:left;touch-action:manipulation;pointer-events:auto;';
+      const h=function(ev){ if(ev){ ev.preventDefault(); ev.stopPropagation(); } if(b._pxLock) return; b._pxLock=true; setTimeout(()=>{ b._pxLock=false; }, 600); if(typeof fn==='function') fn(); };
       b.addEventListener('pointerup',h); b.addEventListener('click',h); return b; };
     nav.appendChild(mk('Exit tutorial','#8a3a3a', PX.exitWp));
-    // A single split control: ← Previous step | Next step → — jump back to
-    // re-read/redo a step, or skip forward if something did not register.
-    const row=make('div'); row.style.cssText='display:flex;border-radius:8px;overflow:hidden;box-shadow:0 3px 10px rgba(0,0,0,.28);';
-    const half=(label,fn,extra)=>{ const b=make('button'); b.textContent=label;
-      b.style.cssText='flex:1 1 0;font:700 11px system-ui;color:#fff;background:#37474f;border:none;padding:5px 10px;cursor:pointer;text-align:center;white-space:nowrap;touch-action:manipulation;pointer-events:auto;'+(extra||'');
-      const h=function(ev){ if(ev){ ev.preventDefault(); ev.stopPropagation(); } if(b._pxLock) return; b._pxLock=true; setTimeout(()=>{ b._pxLock=false; }, 400); if(typeof fn==='function') fn(); };
-      b.addEventListener('pointerup',h); b.addEventListener('click',h); return b; };
-    row.appendChild(half('← Previous', PX.prevStep, 'border-right:1px solid rgba(255,255,255,.28);'));
-    row.appendChild(half('Next →', PX.skipStep));
-    nav.appendChild(row);
+    // Next does the step's expected action (so the parent always sees it happen),
+    // then the tutorial advances on its own.
+    nav.appendChild(mk('Next step →','#37474f', PX.nextStep));
     document.body.appendChild(nav);
   };
   // Clean up any live interaction (shoot / tap / choice / goal-zoom / follow /
@@ -11874,22 +11870,19 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   };
   // Escape hatch — the current step is never a dead end: advance one step so the
   // parent is never stuck if a drag or tap does not register.
-  PX.skipStep = function(){
-    PX._cleanupStepUI();
-    const cur=(typeof tutorialStepIndex!=='undefined')?tutorialStepIndex:0;
-    if(typeof goToTutorialStep==='function') goToTutorialStep(cur+1);
-  };
-  // Step back one step to re-read or redo it. Restore the exact pre-step scene
-  // (captured at that step's first entry) BEFORE the engine re-runs its onEnter,
-  // so the players rebuild from the right starting positions.
-  PX.prevStep = function(){
-    PX._cleanupStepUI();
-    const cur=(typeof tutorialStepIndex!=='undefined')?tutorialStepIndex:0;
-    if(cur>0 && typeof goToTutorialStep==='function'){
-      const target=cur-1;
-      try{ if(PX._snapshots && PX._snapshots[target]) PX._restoreScene(PX._snapshots[target]); }catch(e){}
-      goToTutorialStep(target);
-    } else PX.flash('You’re at the very beginning','',1400);
+  // "Next step" — perform the CURRENT step's expected action, visibly, then let
+  // the tutorial advance through its own validation (so the scene ends up exactly
+  // as if the parent had done it, and later steps line up). Interactive steps
+  // carry an autoComplete() that runs their success path (swim / tap / drag /
+  // goal). Watch / ack-then-animate / animated-watch steps just get confirmed,
+  // which plays their own animation and advances.
+  PX.nextStep = function(){
+    const step = (typeof tutorialSteps!=='undefined' && typeof tutorialStepIndex!=='undefined' && tutorialStepIndex>=0) ? tutorialSteps[tutorialStepIndex] : null;
+    if(step && typeof step.autoComplete==='function'){
+      try{ step.autoComplete(); }catch(e){ try{ tutorialManualAck = true; }catch(_){} }
+    } else {
+      try{ tutorialManualAck = true; }catch(e){}   // confirm watch / ack-then-animate / animated-watch steps
+    }
   };
   PX.hideNav = function(){ const n=document.getElementById('pxNav'); if(n) n.remove(); };
   PX.nextLesson = function(){
