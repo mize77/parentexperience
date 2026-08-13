@@ -10639,9 +10639,15 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   PX.clearReferees = function(){ PX.stopRefTracking(); const L=document.getElementById('pxRefLayer'); if(L) L.innerHTML=''; };
 
   /* --------------------------------------------------- tweening (promise) */
+  // A monotonically increasing token. Bumping it (on a lesson skip / restart)
+  // cancels every in-flight tween AND stalls any async choreography that is
+  // awaiting one — so the previous lesson's animation can never bleed into the
+  // scene the next lesson just set up.
+  PX._animGen = 0;
   function tween(getSet, from, to, ms, done){
-    let t0=null;
-    function frame(ts){ if(t0===null) t0=ts; const k=Math.min(1,(ts-t0)/ms);
+    const gen=PX._animGen; let t0=null;
+    function frame(ts){ if(PX._animGen!==gen) return;   // cancelled — stop, and do NOT call done (its sequence stalls)
+      if(t0===null) t0=ts; const k=Math.min(1,(ts-t0)/ms);
       const e=k<0.5?2*k*k:1-Math.pow(-2*k+2,2)/2;
       getSet(from.x+(to.x-from.x)*e, from.y+(to.y-from.y)*e);
       if(k<1) requestAnimationFrame(frame); else if(done) done(); }
@@ -10670,7 +10676,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       });
     });
   }
-  function delay(ms){ return new Promise(r=>setTimeout(r,ms)); }
+  function delay(ms){ const gen=PX._animGen; return new Promise(r=>setTimeout(()=>{ if(PX._animGen!==gen) return; r(); }, ms)); }   // cancelled delays never resolve, halting the old sequence
 
   /* =====================================================================
      GLOBAL SHOOT MECHANIC  (unchanged core)
@@ -12316,6 +12322,11 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   // not left in whatever half-finished state the previous lesson was in).
   PX.primeForLesson = function(startIdx){
     const starts=PX._lessonStarts||[0]; const lesson=starts.indexOf(startIdx);   // 1 => Lesson 2, 2 => Lesson 3
+    // Cancel every in-flight animation / async choreography from the previous lesson
+    // FIRST, so it can't keep moving players after we rebuild the scene.
+    PX._animGen = (PX._animGen||0) + 1;
+    try{ stopFollow(); }catch(e){}
+    try{ if(PX.stopRefTracking) PX.stopRefTracking(); }catch(e){}
     // Tear down every transient piece of tutorial UI / animation from the old spot.
     try{ if(PX.clearFlash) PX.clearFlash(); }catch(e){}
     try{ clearHoldCinematic(); }catch(e){}
@@ -12394,6 +12405,8 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     document.body.classList.add('guestExperienceActive');   // lock-down CSS only (no coach exit wiring)
     PX.exitFrontCourt();   // always start in full court (swim-off uses the whole pool)
     PX.field.setPhase('water');
+    PX._animGen = (PX._animGen||0) + 1;   // cancel anything still animating from a prior run
+    try{ stopFollow(); }catch(e){}
     PX._swimDone=false; PX._setupDone=false; PX._gkTapped=false; PX._zonesActive=false; PX._snapshots={};
     PX.hideShotClock(); PX.followBall(false); PX.centerDuel(false); PX.setCenterDuel(null,null,null);
     const l1=PX.buildLesson1Steps(), l2=PX.buildLesson2Steps(), l3=PX.buildLesson3Steps();
