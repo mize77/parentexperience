@@ -11888,12 +11888,12 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       function(){ PX.enterFrontCourt(); PX.hideShotClock(); PX.followBall(false);
         PX.showShotClock(28); PX.highlightShotClock(4200); PX.flash('SHOT CLOCK — 28',''); },   // spotlight + red frame land first
       function(){ PX.enterFrontCourt(); PX.followBall(true);
-        PX.tickShotClock(28, 24, 850);   // the clock is alive and runs down as the teams swim over
+        PX.tickShotClock(28, 19, 500);   // alive and running at double speed as the teams swim over -> ~19 when set up
         return PX.setupWhiteHalf().then(()=>{ PX.centerOnBall(); }); }));
 
     // 3.2 (Step 48) The offense sets up and tries to create scoring chances; clock ticks down
     steps.push(animatedWatch('During their attacking time the offensive team is setting up and tries to create scoring opportunities.',
-      function(){ PX.enterFrontCourt(); PX.followBall(true); PX.tickShotClock(24, 14, 300); return bluePassRoutine(); }));
+      function(){ PX.enterFrontCourt(); PX.followBall(true); PX.tickShotClock(19, 14, 500); return bluePassRoutine(); }));
 
     // 3.3 (Step 49) YOU TRY — tap SHOOT: the keeper blocks it, the ball drops to Blue's center
     function resolveShot1(){ if(PX._l3s1) return; PX._l3s1='running';
@@ -11909,7 +11909,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     });
 
     // 3.4 (Step 50) The clock resets to 18
-    steps.push(watch('Blue kept possession after the rebound. The shot clock is reset to 18 seconds — except there is still more time on it.',
+    steps.push(watch('Blue kept possession after the rebound. The shot clock is reset to 18 seconds — except there was still more time on it.',
       ()=>{ PX.enterFrontCourt(); PX.followBall(true); PX.centerOnBall(); PX.showShotClock(18); PX.flash('SHOT CLOCK — 18','',1500); }));
 
     // 3.5 (Step 51) The ball is worked around (#7→#4→#2, keeper slides sideways),
@@ -11999,7 +11999,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       return { carrier:carrier, receiver:receiver, def:blues[1] };       // blues[1] marks the receiver (zone 3)
     }
     const step53 = {
-      instruction:'Now White attacks the other goal, working the ball around the pool. White #2 is about to pass to White #3 — drag the highlighted Blue defender into that passing line to intercept it.',
+      instruction:'Now White attacks the other goal. White #2 (with the ball) is about to pass to White #3 — both circled in red. Drag Blue #3 onto the ghost in the passing line to cut it out.',
       bannerSide:'top', skipDimPhase:true, highlight:null,
       allowedSelectors:function(){ return intDef ? ['.player[data-label="'+intDef.dataset.label+'"]', '#directionPad'] : ['#directionPad']; },
       onEnter:function(){ PX.enterFrontCourt(); PX.followBall(true); PX.showShotClock(28);
@@ -12010,7 +12010,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
           intTarget={ x:(p2.x+p3.x)/2, y:(p2.y+p3.y)/2 };   // a point on the #2 -> #3 passing line
           PX.followBall(false); PX.centerOnBall();
           PX.clearSelections(); if(typeof setSelected==='function') setSelected(def, true);
-          spotlightBetween(+def.dataset.x,+def.dataset.y,intTarget.x,intTarget.y,false);
+          spotlightBetween(p2.x,p2.y,p3.x,p3.y,false);   // ONE red circle enclosing White #2 (ball) and White #3
           step53.ghost={ type:'playerPosition', targetPlayer:{ team:def.dataset.team, pose:def.dataset.pose, rot:+def.dataset.rot||0, x:intTarget.x, y:intTarget.y, label:def.dataset.label } };
         });
       },
@@ -12022,7 +12022,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     // 3.6b (Step 54) The pass is intercepted. INTERCEPTED shows FIRST (it hides the
     // banner); the instruction box opens once it has vanished. The clock resets to 28.
     steps.push(animatedWatch('New possession — by reading the pass, Blue wins the ball. The shot clock resets to 28 seconds.',
-      function(){ PX.clearSelections(); PX.followBall(true);
+      function(){ PX.clearSelections(); clearHoldCinematic(); PX.followBall(true);   // drop the red circle from step 53
         return (async function(){
           const def=intDef||blueFields()[0]; const passer=intPasser||whiteFields()[0];
           if(passer && typeof ball!=='undefined' && ball){ if(typeof moveBallTo==='function') moveBallTo(passer,'right'); }
@@ -12058,20 +12058,18 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
         return delay(3300).then(()=>{ PX.flash('SHOT CLOCK EXPIRED','whistle',1500);
           return delay(1100).then(()=>{ if(typeof PX.whistle==='function'){ try{ PX.whistle(); }catch(e){} } PX.flash('WHISTLE','whistle',1300); }); }); }));
 
-    // 3.7b (Step 57) Turnover — the nearest White player swims to the ball, takes
-    // possession, and moves ~2 m clear of the opponent to secure it (ball on the far arm).
-    steps.push(animatedWatch('The ball turns over to White. The nearest White player swims to the ball, takes possession, and moves clear of his opponent to secure it.',
+    // 3.7b (Step 57) Turnover — the nearest White player MUST swim to the ball, take
+    // possession and continue the play, which starts the shot clock again.
+    steps.push(animatedWatch('The ball turns over to White. The nearest White player must swim to the ball, take possession and continue the play — which starts the shot clock again.',
       function(){ PX.followBall(true);
         return (async function(){
           const bx=(typeof ball!=='undefined'&&ball)?+ball.dataset.x:MID_X, by=(typeof ball!=='undefined'&&ball)?+ball.dataset.y:CY;
           const w=whiteFields().sort((a,b)=>Math.hypot(+a.dataset.x-bx,+a.dataset.y-by)-Math.hypot(+b.dataset.x-bx,+b.dataset.y-by))[0] || whiteFields()[0];
           if(w){ await swimSettle(w, {x:bx,y:by}, 900, faceTo(bx,by, BLUE_GOAL.x,BLUE_GOAL.y), 'v');   // swim to the ball, settle vertical
             if(typeof ballCarrier!=='undefined') ballCarrier=w;
-            const opp=nearestBlue(w);
-            if(opp){ let dx=(+w.dataset.x)-(+opp.dataset.x), dy=(+w.dataset.y)-(+opp.dataset.y); const dl=Math.hypot(dx,dy)||1; dx/=dl; dy/=dl;
-              const secure={ x:(+w.dataset.x)+dx*2.0, y:(+w.dataset.y)+dy*2.0 };
-              await swimSettle(w, secure, 800, faceTo(secure.x,secure.y, BLUE_GOAL.x,BLUE_GOAL.y), 'v'); }   // move ~2 m away to secure
-            const opp2=nearestBlue(w); const hand=(opp2 && (+opp2.dataset.y) < (+w.dataset.y)) ? 'right' : 'left';   // ball on the arm away from the opponent
+            const opp=nearestBlue(w); const hand=(opp && (+opp.dataset.y) < (+w.dataset.y)) ? 'right' : 'left';   // ball on the arm away from the opponent
+            if(typeof moveBallTo==='function') moveBallTo(w, hand);
+            await swim(w, { x:(+w.dataset.x)-2.0, y:+w.dataset.y }, 700);   // continue the play toward the attacking (blue) goal
             if(typeof moveBallTo==='function') moveBallTo(w, hand); }
           PX.showShotClock(28); PX.flash('WHITE IN POSSESSION','good'); await delay(300);
         })();
@@ -12239,7 +12237,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       b.style.cssText='font:700 11px system-ui;color:#fff;background:'+bg+';border:none;border-radius:8px;padding:5px 12px;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.28);text-align:left;touch-action:manipulation;pointer-events:auto;';
       const h=function(ev){ if(ev){ ev.preventDefault(); ev.stopPropagation(); } if(b._pxLock) return; b._pxLock=true; setTimeout(()=>{ b._pxLock=false; }, 600); if(typeof fn==='function') fn(); };
       b.addEventListener('pointerup',h); b.addEventListener('click',h); return b; };
-    nav.appendChild(mk('Exit tutorial','#8a3a3a', PX.exitWp));
+    nav.appendChild(mk('Exit / Skip Lesson','#8a3a3a', PX.exitWp));
     // Next does the step's expected action (so the parent always sees it happen),
     // then the tutorial advances on its own.
     nav.appendChild(mk('Next step →','#37474f', PX.nextStep));
