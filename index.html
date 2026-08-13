@@ -902,16 +902,16 @@
     <!-- Imaginary field markings, dotted/subtle -->
     <g fill="none" stroke-linecap="round" stroke-dasharray=".08 .16" opacity=".92">
       <!-- 2m boxes: no red line drawn on the actual goal line -->
-      <path d="M2 8.5 H4 V15.5 H2" stroke="#ff1a1a" stroke-width=".055"/>
-      <path d="M27 8.5 H25 V15.5 H27" stroke="#ff1a1a" stroke-width=".055"/>
+      <path id="pxMark2mL" d="M2 8.5 H4 V15.5 H2" stroke="#ff1a1a" stroke-width=".055"/>
+      <path id="pxMark2mR" d="M27 8.5 H25 V15.5 H27" stroke="#ff1a1a" stroke-width=".055"/>
       <!-- 5m lines -->
-      <path d="M7 2 V22 M22 2 V22" stroke="#ffe100" stroke-width=".055"/>
+      <path id="pxMark5m" d="M7 2 V22 M22 2 V22" stroke="#ffe100" stroke-width=".055"/>
       <!-- 6m lines -->
-      <path d="M8 2 V22 M21 2 V22" stroke="#145a32" stroke-width=".055"/>
+      <path id="pxMark6m" d="M8 2 V22 M21 2 V22" stroke="#145a32" stroke-width=".055"/>
       <!-- center line -->
-      <path d="M14.5 2 V22" stroke="white" stroke-width=".055"/>
-      <!-- 2m ejection areas at upper end of each goal line -->
-      <path d="M2 2 V4 M27 2 V4" stroke="#ff1a1a" stroke-width=".12"/>
+      <path id="pxMarkCenter" d="M14.5 2 V22" stroke="white" stroke-width=".055"/>
+      <!-- 2m ejection / re-entry areas at the bench-side corner of each goal line -->
+      <path id="pxMarkEjection" d="M2 2 V4 M27 2 V4" stroke="#ff1a1a" stroke-width=".12"/>
     </g>
     <!-- subtle dimension labels -->
     <text id="fieldDimLabel" x="14.5" y="1.35" text-anchor="middle" font-size=".35" fill="#263238" font-weight="700">25m</text>
@@ -10465,16 +10465,14 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     return { setPhase, els };
   })();
 
-  // Blink the field-marking line(s) of a given color (red / yellow / green /
-  // white) to draw attention while that marking is being explained. The lines
-  // live in the dashed group of #fieldSvg and have no ids, so we match by stroke.
-  const LINE_STROKES = { red:['#ff1a1a','#e53935'], yellow:['#ffe100','#ffd400'], green:['#145a32'], white:['white','#ffffff'] };
+  // Blink a specific field marking while it is being explained. Each marking has
+  // its own id, so we target exactly it — the red 2m box must NOT also blink the
+  // (also red) ejection / re-entry marker, which is explained separately.
+  const LINE_IDS = { red:['#pxMark2mL','#pxMark2mR'], yellow:['#pxMark5m'], green:['#pxMark6m'], white:['#pxMarkCenter'], ejection:['#pxMarkEjection'] };
   PX.stopLineBlink = function(){ qa('#fieldSvg .pxBlink').forEach(p=>p.classList.remove('pxBlink')); };
-  PX.blinkLines = function(color){
+  PX.blinkLines = function(key){
     PX.stopLineBlink();
-    const g = PX.field.els().lines; if(!g) return;
-    const want = (LINE_STROKES[color]||[]).map(s=>s.toLowerCase());
-    Array.prototype.slice.call(g.querySelectorAll('path')).forEach(p=>{ const st=(p.getAttribute('stroke')||'').toLowerCase(); if(want.indexOf(st)>=0) p.classList.add('pxBlink'); });
+    (LINE_IDS[key]||[]).forEach(sel=>{ const el=document.querySelector(sel); if(el) el.classList.add('pxBlink'); });
   };
 
   /* -------------------------------------------------- spawn / place players */
@@ -10984,6 +10982,8 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       ()=>{ PX.field.setPhase('lines'); PX.blinkLines('green'); }));
     steps.push(watch('And the white line down the middle separates the two halves of the field.',
       ()=>{ PX.field.setPhase('lines'); PX.blinkLines('white'); }));
+    steps.push(watch('One more red marking: the small red area in the corner by each goal, on the bench side of the field, is the re-entry area. A player who has been excluded waits here until they are allowed back into play.',
+      ()=>{ PX.field.setPhase('lines'); PX.blinkLines('ejection'); }));
 
     // 1.6 Substitutes swim out — leaving seven starters per team (needs Got it)
     steps.push(animatedWatch('Only seven players per team are in the water at once: six field players and one goalkeeper. The other six are substitutes, including a backup goalkeeper (cap 13). Teams usually have six substitutes, but some competitions allow more.',
@@ -11702,6 +11702,10 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     // 2.11 Follow the referees — keep them tracking (positions follow possession)
     steps.push(watch('The referees move with the play — one focuses on the action near the goal, the other on the perimeter and developing play. Their roles switch each time possession changes.',
       ()=>{ if(!document.getElementById('pxRefTop')) PX.showReferees(); PX.startRefTracking(); PX.updateReferees(); }));
+
+    // 2.12 Lesson 2 wrap-up — celebratory headline, mirroring "LESSON 1 COMPLETE"
+    steps.push(watch('That’s the end of Lesson 2. You now know how the game flows — attack and defense, physical play and fouls, scoring, restarts and substitutions, the clock and the officials.',
+      ()=>{ PX.flash('LESSON 2 COMPLETE','good'); }));
 
     return steps;
   };
