@@ -11711,28 +11711,20 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   };
 
   /* =====================================================================
-     SHOT CLOCK — a small scoreboard-style countdown for Lesson 3
+     SHOT CLOCK — drives the app's OWN shot clock (MIZE.State.shotClock +
+     #shotClockRight corner). Parent mode shows only the right corner and hides
+     its mini play/pause/reset controls (see injectBannerCss).
      ===================================================================== */
-  PX.showShotClock = function(n){
-    let el=document.getElementById('pxShotClock');
-    if(!el){ el=make('div'); el.id='pxShotClock';
-      el.style.cssText='position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:9300;'
-        +'background:#0b1a33;color:#ffd23f;font:900 22px/1 system-ui;padding:7px 15px;border-radius:12px;'
-        +'box-shadow:0 4px 14px rgba(0,0,0,.4);letter-spacing:.06em;min-width:70px;text-align:center;border:2px solid #ffd23f;pointer-events:none;';
-      document.body.appendChild(el); }
-    PX.setShotClock(n); return el;
-  };
-  PX.setShotClock = function(n){
-    PX._shotClock=n; const el=document.getElementById('pxShotClock'); if(!el) return;
-    el.textContent=':'+String(Math.max(0,n)).padStart(2,'0');
-    const hot = n<=5; el.style.color = hot?'#ff5252':'#ffd23f'; el.style.borderColor = hot?'#ff5252':'#ffd23f';
-  };
-  PX.hideShotClock = function(){ const el=document.getElementById('pxShotClock'); if(el) el.remove(); if(PX._clockTimer){ clearInterval(PX._clockTimer); PX._clockTimer=null; } };
-  // Animate the clock from `from` down to `to` (inclusive), one count per stepMs.
+  function scState(){ return (typeof MIZE!=='undefined' && MIZE.State) ? MIZE.State.shotClock : null; }
+  function scRender(){ if(typeof updateShotClockDisplay==='function') updateShotClockDisplay(); }
+  PX.showShotClock = function(n){ const s=scState(); if(!s) return; s.direction='down'; s.seconds = (n==null?28:n); s.active=true; scRender(); };
+  PX.setShotClock = function(n){ const s=scState(); if(!s) return; s.seconds=Math.max(0,n); s.active=true; scRender(); };
+  PX.hideShotClock = function(){ const s=scState(); if(PX._clockTimer){ clearInterval(PX._clockTimer); PX._clockTimer=null; } if(typeof stopShotClock==='function') stopShotClock(); if(s){ s.active=false; s.running=false; } scRender(); };
+  // Animate a countdown from `from` down to `to` (inclusive), one count per stepMs.
   PX.tickShotClock = function(from, to, stepMs){
-    if(!document.getElementById('pxShotClock')) PX.showShotClock(from); else PX.setShotClock(from);
+    PX.setShotClock(from);
     if(PX._clockTimer){ clearInterval(PX._clockTimer); PX._clockTimer=null; }
-    let n=from; PX._clockTimer=setInterval(()=>{ n--; if(n<to){ clearInterval(PX._clockTimer); PX._clockTimer=null; return; } PX.setShotClock(n); }, stepMs||220);
+    let n=from; PX._clockTimer=setInterval(()=>{ n--; if(n<to){ clearInterval(PX._clockTimer); PX._clockTimer=null; return; } PX.setShotClock(n); }, stepMs||260);
   };
 
   /* --------------------------- Blue-attack helpers (mirror of the White ones) */
@@ -11765,13 +11757,14 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     const steps=[];
     let intDef=null, intTarget=null;   // interception-drag state
 
-    // 3.1 New possession — Blue attacks the white goal, shot clock at 28
+    // 3.1 New possession — Blue attacks the white goal, shot clock at 28.
+    // Lesson 3 plays out in FULL COURT so the passes/interception across the pool are visible.
     steps.push(ackThenAnimate('A team cannot keep the ball forever. Each new possession starts with a shot clock — up to 28 seconds to create a shot.',
-      function(){ PX.hideShotClock(); return PX.setupWhiteHalf().then(()=>{ PX.showShotClock(28); PX.flash('SHOT CLOCK — 28','',1500); }); }));
+      function(){ PX.exitFrontCourt(); PX.hideShotClock(); return PX.setupWhiteHalf().then(()=>{ PX.showShotClock(28); PX.flash('SHOT CLOCK — 28','',1500); }); }));
 
     // 3.2 Creating the shot — Blue passes, clock ticks down
     steps.push(animatedWatch('During those seconds the team passes and moves to create the best possible scoring chance.',
-      function(){ PX.tickShotClock(28, 14, 260); return bluePassRoutine(); }));
+      function(){ PX.exitFrontCourt(); PX.tickShotClock(28, 14, 260); return bluePassRoutine(); }));
 
     // 3.3 YOU TRY — beat the clock: shoot (saved, Blue keeps the rebound)
     function resolveShot1(){ if(PX._l3s1) return; PX.flash('Saved — but Blue grabs the rebound','save');
@@ -11780,7 +11773,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     steps.push({
       instruction:'Time is running out — take your shot! Tap a spot in the goal, then press SHOOT.',
       bannerSide:'top', skipDimPhase:true, highlight:null, allowedSelectors:['#pxShootZone','#pxShootBtn'],
-      onEnter:function(){ PX._l3s1=false; PX.setShotClock(5); PX.tickShotClock(5, 1, 800); blueShotAtWhite({ saveBounce:true, onResult:resolveShot1 }); },
+      onEnter:function(){ PX.exitFrontCourt(); PX._l3s1=false; PX.setShotClock(5); PX.tickShotClock(5, 1, 800); blueShotAtWhite({ saveBounce:true, onResult:resolveShot1 }); },
       validate:{ type:'custom', fn:()=> PX._l3s1===true },
       autoComplete:function(){ if(PX.shoot&&PX.shoot.cancel) PX.shoot.cancel(); resolveShot1(); }
     });
@@ -11796,7 +11789,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     steps.push({
       instruction:'Shoot again — tap a spot and press SHOOT. Watch what the goalkeeper does this time.',
       bannerSide:'top', skipDimPhase:true, highlight:null, allowedSelectors:['#pxShootZone','#pxShootBtn'],
-      onEnter:function(){ PX._l3save=false; PX.setShotClock(9); blueShotAtWhite({ saveBounce:false, onResult:resolveSave2 }); },
+      onEnter:function(){ PX.exitFrontCourt(); PX._l3save=false; PX.setShotClock(9); blueShotAtWhite({ saveBounce:false, onResult:resolveSave2 }); },
       validate:{ type:'custom', fn:()=> PX._l3save===true },
       autoComplete:function(){ if(PX.shoot&&PX.shoot.cancel) PX.shoot.cancel(); resolveSave2(); }
     });
@@ -11828,7 +11821,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       instruction:'White is about to pass between two players. Drag the highlighted Blue defender into the passing lane to intercept it.',
       bannerSide:'top', skipDimPhase:true, highlight:null,
       allowedSelectors:function(){ return intDef ? ['.player[data-label="'+intDef.dataset.label+'"]', '#directionPad'] : ['#directionPad']; },
-      onEnter:function(){ PX.showShotClock(28); setupIntercept();
+      onEnter:function(){ PX.exitFrontCourt(); PX.showShotClock(28); setupIntercept();
         if(intDef) step36.ghost={ type:'playerPosition', targetPlayer:{ team:intDef.dataset.team, pose:intDef.dataset.pose, rot:+intDef.dataset.rot||0, x:intTarget.x, y:intTarget.y, label:intDef.dataset.label } };
       },
       validate:{ type:'custom', fn:function(){ if(!intDef||!intTarget) return false; return Math.hypot((+intDef.dataset.x)-intTarget.x, (+intDef.dataset.y)-intTarget.y) <= 1.2; } },
@@ -11912,7 +11905,10 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       + ' @keyframes pxLineBlink{ 0%,100%{ opacity:1; } 50%{ opacity:.1; } }'   // blink a field-marking line while it is explained
       + ' #fieldSvg path.pxBlink{ animation:pxLineBlink .75s ease-in-out infinite; stroke-width:.16 !important; }'
       // Block/deactivate every app control that is not part of a tutorial step.
-      + ' body.pxParentMode #controlsPanel, body.pxParentMode #quickCommandBar, body.pxParentMode #edgeTabStack, body.pxParentMode #playerActionBar, body.pxParentMode #timelineCommandsBar, body.pxParentMode #presentationPlaybackBar, body.pxParentMode #ballOwnerStatus, body.pxParentMode #autosaveStatus, body.pxParentMode #shotClockLeft, body.pxParentMode #shotClockRight, body.pxParentMode #studioFrameDots, body.pxParentMode h1{ display:none !important; }';
+      + ' body.pxParentMode #controlsPanel, body.pxParentMode #quickCommandBar, body.pxParentMode #edgeTabStack, body.pxParentMode #playerActionBar, body.pxParentMode #timelineCommandsBar, body.pxParentMode #presentationPlaybackBar, body.pxParentMode #ballOwnerStatus, body.pxParentMode #autosaveStatus, body.pxParentMode #studioFrameDots, body.pxParentMode h1{ display:none !important; }'
+      // Shot clock: parents see ONLY the right corner (clear of the top-left banner) and none of its control buttons.
+      + ' body.pxParentMode #shotClockLeft{ display:none !important; }'
+      + ' body.pxParentMode .shotClockMiniControls{ display:none !important; }';
     document.head.appendChild(s);
   }
 
