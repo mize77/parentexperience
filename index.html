@@ -10677,6 +10677,10 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     });
   }
   function delay(ms){ const gen=PX._animGen; return new Promise(r=>setTimeout(()=>{ if(PX._animGen!==gen) return; r(); }, ms)); }   // cancelled delays never resolve, halting the old sequence
+  // Wrap a setTimeout callback so it becomes a no-op if the animation generation
+  // has since changed (a lesson skip / restart) — for setTimeout chains that move
+  // players or re-arm mechanics and would otherwise fire after the skip.
+  function genTimeout(fn, ms){ const gen=PX._animGen; return setTimeout(function(){ if(PX._animGen!==gen) return; fn(); }, ms); }
 
   /* =====================================================================
      GLOBAL SHOOT MECHANIC  (unchanged core)
@@ -11285,8 +11289,9 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       const d=PX._duel; if(!d) return; const atk=d.atk, def=d.def;
       if(!atk||!def||!atk.isConnected||!def.isConnected) return;
       const bp=ballObj();
-      atk.dataset.rot=faceTo(+atk.dataset.x,+atk.dataset.y, bp.x,bp.y);           // center forward faces the ball
       const hasBall=(typeof ballCarrier!=='undefined' && ballCarrier===atk);
+      if(hasBall){ if(typeof moveBallTo==='function') moveBallTo(atk, (typeof ballHand!=='undefined'&&ballHand)?ballHand:'left'); }   // center holds the ball: keep it in his hand, don't spin toward it
+      else { atk.dataset.rot=faceTo(+atk.dataset.x,+atk.dataset.y, bp.x,bp.y); }                                                    // otherwise the center faces the ball
       const s=centerDefSpot({x:+atk.dataset.x,y:+atk.dataset.y}, d.goal, bp, hasBall);
       const cx=+def.dataset.x, cy=+def.dataset.y;
       def.dataset.x=cx+(s.x-cx)*0.3; def.dataset.y=cy+(s.y-cy)*0.3;               // ease into the hug (marks a swimming center)
@@ -11342,10 +11347,10 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       PX.shoot.begin({ side:'left', subtleZone:true, forceSave:true, saveBounce:true, ghost:{x:BLUE_GOAL.x, y:CY}, onResult:function(){
         PX.flash('The goalie blocked it — that shot\nwas within his reach','save');
         PX.flash('Aim out of his reach, close to a post','');
-        setTimeout(function(){                                  // give the ball back to the SAME shooter (zone 4), then shoot again
+        genTimeout(function(){                                  // give the ball back to the SAME shooter (zone 4), then shoot again
           const shooter=PX._shooter||currentWhiteShooter();
           if(shooter){ if(typeof ballCarrier!=='undefined') ballCarrier=shooter; if(typeof moveBallTo==='function') moveBallTo(shooter,'right'); }
-          setTimeout(()=>s25Attempt(1), 900);
+          genTimeout(()=>s25Attempt(1), 900);
         }, 3600);   // let both headlines show (~2s each)
       }});
     } else {
@@ -11954,10 +11959,11 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       instruction:'The ball is worked around to open a better angle. When you see the chance, tap SHOOT.',
       bannerSide:'top', skipDimPhase:true, highlight:null, allowedSelectors:['#pxL3ShootBtn'],
       onEnter:function(){ PX.enterFrontCourt(); PX.followBall(true); PX._l3save=false; PX.tickShotClock(18, 12, 360);   // runs DOWN 18->12 during the passing (no jump)
-        const b7=blueByCap(7);
-        if(b7){ if(typeof ballCarrier!=='undefined') ballCarrier=b7; if(typeof moveBallTo==='function') moveBallTo(b7,'left'); }   // Blue #7 clearly secures the ball in his left hand
-        const seq=[ b7, blueByCap(4), blueByCap(2) ].filter(Boolean);
-        passSeqSmartGK(seq.length?seq:blueFields().slice(0,3)).then(()=>{ PX.followBall(false); PX.centerOnBall(); PX.shootButton(resolveSave2); });
+        const b7=blueByCap(7)||blueCenter()||blueFields()[0];
+        if(b7){ if(typeof ballCarrier!=='undefined') ballCarrier=b7; if(typeof moveBallTo==='function') moveBallTo(b7,'left'); if(typeof place==='function') place(b7); }   // Blue #7 secures the ball in his LEFT hand
+        let seq=[ blueByCap(4), blueByCap(2) ].filter(Boolean);
+        if(!seq.length) seq=blueFields().filter(x=>x!==b7).slice(0,2);
+        delay(750).then(()=>passSeqSmartGK(seq)).then(()=>{ PX.followBall(false); PX.centerOnBall(); PX.shootButton(resolveSave2); });   // hold the ball a beat, then work it #7 -> #4 -> #2
       },
       validate:{ type:'custom', fn:()=> PX._l3save===true },
       autoComplete:function(){ PX.hideShootButton(); resolveSave2(); }
@@ -12346,9 +12352,22 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       PX.clearActors(); if(PX.clearReferees) PX.clearReferees();
       PX.field.setPhase('lines');
       PX.ensureOffenseBoard();
+      try{ PX.centerDuel(false); }catch(e){}   // hold the intro still; the lesson's own setup re-enables the duel
       PX._swimDone=true; PX._setupDone=true;
       if(lesson>=2){ PX.enterFrontCourt(); } else if(PX.exitFrontCourt){ PX.exitFrontCourt(); }
       PX.hideShotClock();
+      // Watchdog: for ~2.4s, re-assert the freshly-primed positions while we're still
+      // on the lesson's FIRST step — a guaranteed backstop so NO stray animation from
+      // the previous lesson can nudge the scene before the new lesson plays.
+      const snap=[...document.querySelectorAll('.player')].map(e=>({el:e,x:+e.dataset.x,y:+e.dataset.y,pose:e.dataset.pose,rot:+e.dataset.rot||0}));
+      const gen=PX._animGen, home=startIdx; let ticks=0, reached=false;
+      if(PX._primeWatch){ clearInterval(PX._primeWatch); PX._primeWatch=null; }
+      PX._primeWatch=setInterval(function(){ ticks++;
+        const si=(typeof tutorialStepIndex!=='undefined')?tutorialStepIndex:home;
+        if(si===home) reached=true;
+        if(PX._animGen!==gen || ticks>18 || (reached && si!==home)){ clearInterval(PX._primeWatch); PX._primeWatch=null; return; }
+        snap.forEach(s=>{ if(!s.el.isConnected) return; s.el.dataset.x=s.x; s.el.dataset.y=s.y; s.el.dataset.pose=s.pose; s.el.dataset.rot=s.rot; if(typeof place==='function') place(s.el); });
+      }, 130);
     }
   };
   PX.nextLesson = function(){
