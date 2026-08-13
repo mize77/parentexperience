@@ -11727,6 +11727,31 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     let n=from; PX._clockTimer=setInterval(()=>{ n--; if(n<to){ clearInterval(PX._clockTimer); PX._clockTimer=null; return; } PX.setShotClock(n); }, stepMs||260);
   };
 
+  /* ---------------- Auto-follow scroll (Front Court) ------------------------
+     Front Court crops to part of the pool; this eases the vertical scroll so the
+     ball (the action) stays centred — the parent doesn't have to swipe to keep up. */
+  PX.centerOnBall = function(){
+    try{ if(typeof frontCourtActive==='undefined' || !frontCourtActive) return;
+      const wrap=document.getElementById('stageWrap'); const t=(typeof ball!=='undefined'&&ball)?ball:null;
+      if(!wrap||!t) return; const tr=t.getBoundingClientRect(), wr=wrap.getBoundingClientRect();
+      if(!tr.height||!wr.height) return; wrap.scrollTop += (tr.top+tr.height/2-wr.top) - wr.height*0.5;
+    }catch(e){}
+  };
+  PX.followBall = function(on){
+    if(PX._followScroll){ clearInterval(PX._followScroll); PX._followScroll=null; }
+    if(!on) return;
+    PX._followScroll=setInterval(function(){
+      try{
+        if(typeof frontCourtActive==='undefined' || !frontCourtActive) return;
+        const wrap=document.getElementById('stageWrap'); const t=(typeof ball!=='undefined'&&ball)?ball:null;
+        if(!wrap||!t) return; const tr=t.getBoundingClientRect(), wr=wrap.getBoundingClientRect();
+        if(!tr.height||!wr.height) return;
+        const delta=(tr.top+tr.height/2-wr.top) - wr.height*0.5;
+        if(Math.abs(delta)>2) wrap.scrollTop += delta*0.22;   // ease toward centred
+      }catch(e){}
+    }, 120);
+  };
+
   /* --------------------------- Blue-attack helpers (mirror of the White ones) */
   function bluePassRoutine(){
     return (async function(){
@@ -11758,13 +11783,14 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     let intDef=null, intTarget=null;   // interception-drag state
 
     // 3.1 New possession — Blue attacks the white goal, shot clock at 28.
-    // Lesson 3 plays out in FULL COURT so the passes/interception across the pool are visible.
-    steps.push(ackThenAnimate('A team cannot keep the ball forever. Each new possession starts with a shot clock — up to 28 seconds to create a shot.',
-      function(){ PX.exitFrontCourt(); PX.hideShotClock(); return PX.setupWhiteHalf().then(()=>{ PX.showShotClock(28); PX.flash('SHOT CLOCK — 28','',1500); }); }));
+    // Lesson 3 stays in FRONT COURT; the view auto-follows the ball so the parent
+    // doesn't have to swipe to keep up (they still can, along the screen edges).
+    steps.push(ackThenAnimate('A team cannot keep the ball forever. Each new possession starts with a shot clock — up to 28 seconds to create a shot. The view will follow the play automatically; you can also swipe up or down along the screen edges to look around.',
+      function(){ PX.enterFrontCourt(); PX.hideShotClock(); return PX.setupWhiteHalf().then(()=>{ PX.showShotClock(28); PX.centerOnBall(); PX.followBall(true); PX.flash('SHOT CLOCK — 28','',1500); }); }));
 
     // 3.2 Creating the shot — Blue passes, clock ticks down
     steps.push(animatedWatch('During those seconds the team passes and moves to create the best possible scoring chance.',
-      function(){ PX.exitFrontCourt(); PX.tickShotClock(28, 14, 260); return bluePassRoutine(); }));
+      function(){ PX.enterFrontCourt(); PX.followBall(true); PX.tickShotClock(28, 14, 260); return bluePassRoutine(); }));
 
     // 3.3 YOU TRY — beat the clock: shoot (saved, Blue keeps the rebound)
     function resolveShot1(){ if(PX._l3s1) return; PX.flash('Saved — but Blue grabs the rebound','save');
@@ -11773,14 +11799,14 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     steps.push({
       instruction:'Time is running out — take your shot! Tap a spot in the goal, then press SHOOT.',
       bannerSide:'top', skipDimPhase:true, highlight:null, allowedSelectors:['#pxShootZone','#pxShootBtn'],
-      onEnter:function(){ PX.exitFrontCourt(); PX._l3s1=false; PX.setShotClock(5); PX.tickShotClock(5, 1, 800); blueShotAtWhite({ saveBounce:true, onResult:resolveShot1 }); },
+      onEnter:function(){ PX.enterFrontCourt(); PX.followBall(false); PX.centerOnBall(); PX._l3s1=false; PX.setShotClock(5); PX.tickShotClock(5, 1, 800); blueShotAtWhite({ saveBounce:true, onResult:resolveShot1 }); },
       validate:{ type:'custom', fn:()=> PX._l3s1===true },
       autoComplete:function(){ if(PX.shoot&&PX.shoot.cancel) PX.shoot.cancel(); resolveShot1(); }
     });
 
     // 3.4 Attacking team keeps the ball -> clock resets to 18
     steps.push(watch('Blue kept possession after the rebound. In certain situations where the attacking team keeps the ball, the clock is reset to 18 seconds — not always, but in cases like this one.',
-      ()=>{ PX.showShotClock(18); PX.flash('SHOT CLOCK — 18','',1500); }));
+      ()=>{ PX.enterFrontCourt(); PX.followBall(true); PX.centerOnBall(); PX.showShotClock(18); PX.flash('SHOT CLOCK — 18','',1500); }));
 
     // 3.5 YOU TRY — shoot again: the keeper CATCHES and holds it (possession changes)
     function resolveSave2(){ if(PX._l3save) return;
@@ -11789,7 +11815,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     steps.push({
       instruction:'Shoot again — tap a spot and press SHOOT. Watch what the goalkeeper does this time.',
       bannerSide:'top', skipDimPhase:true, highlight:null, allowedSelectors:['#pxShootZone','#pxShootBtn'],
-      onEnter:function(){ PX.exitFrontCourt(); PX._l3save=false; PX.setShotClock(9); blueShotAtWhite({ saveBounce:false, onResult:resolveSave2 }); },
+      onEnter:function(){ PX.enterFrontCourt(); PX.followBall(false); PX.centerOnBall(); PX._l3save=false; PX.setShotClock(9); blueShotAtWhite({ saveBounce:false, onResult:resolveSave2 }); },
       validate:{ type:'custom', fn:()=> PX._l3save===true },
       autoComplete:function(){ if(PX.shoot&&PX.shoot.cancel) PX.shoot.cancel(); resolveSave2(); }
     });
@@ -11821,7 +11847,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       instruction:'White is about to pass between two players. Drag the highlighted Blue defender into the passing lane to intercept it.',
       bannerSide:'top', skipDimPhase:true, highlight:null,
       allowedSelectors:function(){ return intDef ? ['.player[data-label="'+intDef.dataset.label+'"]', '#directionPad'] : ['#directionPad']; },
-      onEnter:function(){ PX.exitFrontCourt(); PX.showShotClock(28); setupIntercept();
+      onEnter:function(){ PX.enterFrontCourt(); PX.followBall(false); PX.showShotClock(28); setupIntercept(); PX.centerOnBall();
         if(intDef) step36.ghost={ type:'playerPosition', targetPlayer:{ team:intDef.dataset.team, pose:intDef.dataset.pose, rot:+intDef.dataset.rot||0, x:intTarget.x, y:intTarget.y, label:intDef.dataset.label } };
       },
       validate:{ type:'custom', fn:function(){ if(!intDef||!intTarget) return false; return Math.hypot((+intDef.dataset.x)-intTarget.x, (+intDef.dataset.y)-intTarget.y) <= 1.2; } },
@@ -11831,7 +11857,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
 
     // 3.6b The interception plays out — ball to Blue, new possession 28
     steps.push(animatedWatch('Intercepted! By reading the pass, Blue wins the ball and starts a brand-new possession.',
-      function(){ PX.clearSelections();
+      function(){ PX.clearSelections(); PX.followBall(true);
         return (async function(){
           const def=intDef||blueFields()[0]; const passer=whiteFields()[0];
           if(passer && typeof ball!=='undefined' && ball){ moveBallTo(passer,'left'); }
@@ -11844,14 +11870,14 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
 
     // 3.7 Shot clock expires — possession changes on the buzzer
     steps.push(animatedWatch('This time Blue can’t create a shot in time. Watch the clock run out …',
-      function(){ PX.tickShotClock(4, 0, 700);
+      function(){ PX.followBall(true); PX.tickShotClock(4, 0, 700);
         return delay(3200).then(()=>{ if(typeof PX.whistle==='function') PX.whistle(); PX.flash('SHOT CLOCK EXPIRED','whistle',1400); }); }));
     steps.push(watch('When the shot clock runs out before a shot, possession simply passes to the other team.',
       ()=>{ /* headline already shown */ }));
 
     // 3.8 Lesson 3 wrap-up
     steps.push(watch('That’s the end of Lesson 3. You now understand the shot clock: each possession is limited in time, it can reset in certain situations, and it passes to the other team on a change of possession or when it runs out.',
-      ()=>{ PX.hideShotClock(); PX.flash('LESSON 3 COMPLETE','good'); }));
+      ()=>{ PX.followBall(false); PX.hideShotClock(); PX.flash('LESSON 3 COMPLETE','good'); }));
 
     return steps;
   };
@@ -11906,9 +11932,10 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       + ' #fieldSvg path.pxBlink{ animation:pxLineBlink .75s ease-in-out infinite; stroke-width:.16 !important; }'
       // Block/deactivate every app control that is not part of a tutorial step.
       + ' body.pxParentMode #controlsPanel, body.pxParentMode #quickCommandBar, body.pxParentMode #edgeTabStack, body.pxParentMode #playerActionBar, body.pxParentMode #timelineCommandsBar, body.pxParentMode #presentationPlaybackBar, body.pxParentMode #ballOwnerStatus, body.pxParentMode #autosaveStatus, body.pxParentMode #studioFrameDots, body.pxParentMode h1{ display:none !important; }'
-      // Shot clock: parents see ONLY the right corner (clear of the top-left banner) and none of its control buttons.
+      // Shot clock: parents see ONE clock, centered at the top of the screen, with no control buttons.
       + ' body.pxParentMode #shotClockLeft{ display:none !important; }'
-      + ' body.pxParentMode .shotClockMiniControls{ display:none !important; }';
+      + ' body.pxParentMode .shotClockMiniControls{ display:none !important; }'
+      + ' body.pxParentMode #shotClockRight.shotClockViewportFixed{ left:50% !important; right:auto !important; transform:translateX(-50%) !important; }';
     document.head.appendChild(s);
   }
 
@@ -12078,7 +12105,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   };
   PX.restartWp = function(){
     const e=document.getElementById('pxEndScreen'); if(e) e.remove();
-    PX.hideNav(); PX.hideShotClock();
+    PX.hideNav(); PX.hideShotClock(); PX.followBall(false);
     if(typeof tutorialModeActive!=='undefined' && tutorialModeActive && typeof exitTutorial==='function') exitTutorial();
     PX.clearActors(); PX.clearReferees();
     PX.showStartScreen(beginLessons);   // back to "Water Polo made easy" start screen
@@ -12093,7 +12120,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     PX.exitFrontCourt();   // always start in full court (swim-off uses the whole pool)
     PX.field.setPhase('water');
     PX._swimDone=false; PX._setupDone=false; PX._gkTapped=false; PX._zonesActive=false; PX._snapshots={};
-    PX.hideShotClock();
+    PX.hideShotClock(); PX.followBall(false);
     const l1=PX.buildLesson1Steps(), l2=PX.buildLesson2Steps(), l3=PX.buildLesson3Steps();
     PX._lessonStarts=[0, l1.length, l1.length+l2.length];   // Lesson 2 / Lesson 3 start offsets
     const allSteps = wrapBannerReset([].concat(l1, l2, l3));
