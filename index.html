@@ -11760,6 +11760,53 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
      LAUNCH
      ===================================================================== */
   // ---- Start screen: "Water Polo" bubble + yellow cursive "made easy!" ----
+  // ---- Add-to-Home-Screen recommendation (mobile only) ----
+  // Shown before the start screen on phones/tablets (skipped on desktop and when
+  // already launched from the installed home-screen icon). Full-screen, using the
+  // XquiX Studio for the best experience — especially on a small phone.
+  PX.showA2HS = function(onDone){
+    const finish=()=>{ const o=document.getElementById('pxA2HS'); if(o) o.remove(); if(typeof onDone==='function') onDone(); };
+    const kind = (typeof detectGuestWelcomeDeviceKind==='function') ? detectGuestWelcomeDeviceKind()
+                 : ((typeof isTouchDevice==='function' && isTouchDevice()) ? 'ios' : 'desktop');
+    const installed = (typeof isGuestExperienceInstalled==='function') ? isGuestExperienceInstalled() : false;
+    const touch = (typeof isTouchDevice==='function') ? isTouchDevice() : false;
+    // Only phones/tablets in a browser see this; desktop and installed apps skip straight to the tutorial.
+    if(kind==='desktop' || installed || !touch){ finish(); return; }
+    if(document.getElementById('pxA2HS')) return;
+    const tablet = (typeof isGuestWelcomeTablet==='function') ? isGuestWelcomeTablet() : false;
+    const ov=make('div'); ov.id='pxA2HS';
+    ov.style.cssText='position:fixed;inset:0;z-index:9850;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;color:#fff;overflow:auto;'
+      +'background:radial-gradient(circle at 50% 38%, #1b7373 0%, #0f4747 56%, #0b2b2b 100%);';
+    const card=make('div'); card.style.cssText='max-width:520px;width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(75,184,189,.38);border-radius:22px;padding:26px 22px;box-shadow:0 18px 60px rgba(0,0,0,.45);';
+    const h=make('div'); h.textContent='Add XquiX Studio to your Home Screen'; h.style.cssText='font:900 clamp(21px,5.6vw,30px)/1.18 system-ui;margin-bottom:6px;';
+    const sub=make('div'); sub.textContent='Highly recommended on phones'; sub.style.cssText='color:#4bb8bd;font:800 13px system-ui;letter-spacing:.02em;margin-bottom:16px;';
+    const lead=make('p'); lead.textContent='For the best experience — especially on a smaller phone screen — add the Studio to your Home Screen and open it from there. It then runs full-screen, without the browser bars taking up space.';
+    lead.style.cssText='font:400 15px/1.5 system-ui;color:#e8f3f3;margin:0 0 18px;';
+    card.appendChild(h); card.appendChild(sub); card.appendChild(lead);
+    const where = tablet ? 'near the top of the screen' : 'in the browser toolbar';
+    const steps = (kind==='ios')
+      ? [ 'Tap the <b>Share</b> button ( □↑ ) '+where+'.',
+          'Scroll down and choose <b>“Add to Home Screen”</b>, then tap <b>Add</b>.',
+          'Open XquiX Studio from the new icon on your Home Screen, and start the tutorial from there.' ]
+      : [ 'Tap the <b>menu</b> ( ⋮ ) near the top of your browser.',
+          'Choose <b>“Add to Home Screen”</b> or <b>“Install app”</b>.',
+          'Open XquiX Studio from the new icon on your Home Screen, and start the tutorial from there.' ];
+    const list=make('div'); list.style.cssText='text-align:left;display:flex;flex-direction:column;gap:12px;margin-bottom:22px;';
+    steps.forEach((s,i)=>{ const row=make('div'); row.style.cssText='display:flex;gap:12px;align-items:flex-start;';
+      const n=make('div'); n.textContent=String(i+1); n.style.cssText='flex:0 0 26px;width:26px;height:26px;border-radius:50%;background:#1b7373;border:2px solid #4bb8bd;color:#fff;font:800 14px system-ui;display:flex;align-items:center;justify-content:center;';
+      const t=make('div'); t.innerHTML=s; t.style.cssText='font:400 15px/1.45 system-ui;color:#eaf5f5;padding-top:2px;';
+      row.appendChild(n); row.appendChild(t); list.appendChild(row); });
+    card.appendChild(list);
+    const cont=make('button'); cont.textContent='Continue to the tutorial';
+    cont.style.cssText='font:800 17px system-ui;color:#fff;background:#1b7373;border:2px solid #4bb8bd;border-radius:999px;padding:13px 28px;cursor:pointer;width:100%;touch-action:manipulation;';
+    cont.addEventListener('click', finish);
+    card.appendChild(cont);
+    const note=make('div'); note.textContent='You can also just continue in your browser.'; note.style.cssText='font:400 12px system-ui;color:#9fc7c9;margin-top:12px;';
+    card.appendChild(note);
+    ov.appendChild(card);
+    document.body.appendChild(ov);
+  };
+
   PX.showStartScreen = function(onStart){
     if(document.getElementById('pxStartScreen')) return;
     const ov=make('div'); ov.id='pxStartScreen';
@@ -11912,7 +11959,8 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       if(typeof isTouchDevice==='function' && isTouchDevice()) document.body.classList.add('pxTouch');   // phone/tablet layout: banner top-left
       PX.reverseZoneNumbers();   // perimeter 1–5 so the defending goalie has zone 1 on his RIGHT, zone 5 on his LEFT
       PX.field.setPhase('water');           // keep the field hidden behind the start screen
-      PX.showStartScreen(beginLessons);     // stays until the parent clicks "Get started!"
+      // On phones/tablets, first offer the Add-to-Home-Screen guide, THEN the start screen.
+      PX.showA2HS(function(){ PX.showStartScreen(beginLessons); });
     }catch(err){ console.error('Parent Experience failed to start:', err); }
   };
 
