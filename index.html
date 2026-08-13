@@ -11710,6 +11710,159 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     return steps;
   };
 
+  /* =====================================================================
+     SHOT CLOCK — a small scoreboard-style countdown for Lesson 3
+     ===================================================================== */
+  PX.showShotClock = function(n){
+    let el=document.getElementById('pxShotClock');
+    if(!el){ el=make('div'); el.id='pxShotClock';
+      el.style.cssText='position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:9300;'
+        +'background:#0b1a33;color:#ffd23f;font:900 22px/1 system-ui;padding:7px 15px;border-radius:12px;'
+        +'box-shadow:0 4px 14px rgba(0,0,0,.4);letter-spacing:.06em;min-width:70px;text-align:center;border:2px solid #ffd23f;pointer-events:none;';
+      document.body.appendChild(el); }
+    PX.setShotClock(n); return el;
+  };
+  PX.setShotClock = function(n){
+    PX._shotClock=n; const el=document.getElementById('pxShotClock'); if(!el) return;
+    el.textContent=':'+String(Math.max(0,n)).padStart(2,'0');
+    const hot = n<=5; el.style.color = hot?'#ff5252':'#ffd23f'; el.style.borderColor = hot?'#ff5252':'#ffd23f';
+  };
+  PX.hideShotClock = function(){ const el=document.getElementById('pxShotClock'); if(el) el.remove(); if(PX._clockTimer){ clearInterval(PX._clockTimer); PX._clockTimer=null; } };
+  // Animate the clock from `from` down to `to` (inclusive), one count per stepMs.
+  PX.tickShotClock = function(from, to, stepMs){
+    if(!document.getElementById('pxShotClock')) PX.showShotClock(from); else PX.setShotClock(from);
+    if(PX._clockTimer){ clearInterval(PX._clockTimer); PX._clockTimer=null; }
+    let n=from; PX._clockTimer=setInterval(()=>{ n--; if(n<to){ clearInterval(PX._clockTimer); PX._clockTimer=null; return; } PX.setShotClock(n); }, stepMs||220);
+  };
+
+  /* --------------------------- Blue-attack helpers (mirror of the White ones) */
+  function bluePassRoutine(){
+    return (async function(){
+      stopFollow(); PX.clearSelections();
+      const b=blueFields(); if(!b.length) return;
+      const carrier=(typeof ballCarrier!=='undefined'&&ballCarrier&&ballCarrier.dataset.team==='blue')?ballCarrier:b[0];
+      const others=b.filter(p=>p!==carrier);
+      const seq=[others[0], others[1], carrier].filter(Boolean);
+      for(const t of seq){
+        await passBallTo(t, 550);
+        const cx=+t.dataset.x, cy=+t.dataset.y;
+        await swim(t, { x:cx-0.6, y:cy }, 800);   // ease slightly back (toward own goal = -x for Blue attacking right)
+        if(typeof moveBallTo==='function') moveBallTo(t, 'left');
+        await delay(150);
+      }
+    })();
+  }
+  // A Blue shot at the WHITE (right) goal — always a save, so the story stays in
+  // Lesson 3's possession thread. saveBounce leaves a loose ball for a rebound.
+  function blueShotAtWhite(opts){
+    opts=opts||{};
+    const carrier=(typeof ballCarrier!=='undefined'&&ballCarrier&&ballCarrier.dataset.team==='blue')?ballCarrier:blueFields()[0];
+    if(carrier){ if(typeof ballCarrier!=='undefined') ballCarrier=carrier; if(typeof moveBallTo==='function') moveBallTo(carrier,'left'); }
+    PX.shoot.begin({ side:'right', subtleZone:true, forceSave:true, saveBounce:!!opts.saveBounce, ghost:{x:WHITE_GOAL.x, y:CY}, onResult:opts.onResult });
+  }
+
+  PX.buildLesson3Steps = function(){
+    const steps=[];
+    let intDef=null, intTarget=null;   // interception-drag state
+
+    // 3.1 New possession — Blue attacks the white goal, shot clock at 28
+    steps.push(ackThenAnimate('A team cannot keep the ball forever. Each new possession starts with a shot clock — up to 28 seconds to create a shot.',
+      function(){ PX.hideShotClock(); return PX.setupWhiteHalf().then(()=>{ PX.showShotClock(28); PX.flash('SHOT CLOCK — 28','',1500); }); }));
+
+    // 3.2 Creating the shot — Blue passes, clock ticks down
+    steps.push(animatedWatch('During those seconds the team passes and moves to create the best possible scoring chance.',
+      function(){ PX.tickShotClock(28, 14, 260); return bluePassRoutine(); }));
+
+    // 3.3 YOU TRY — beat the clock: shoot (saved, Blue keeps the rebound)
+    function resolveShot1(){ if(PX._l3s1) return; PX.flash('Saved — but Blue grabs the rebound','save');
+      const b=blueFields()[0]; if(b){ if(typeof ballCarrier!=='undefined') ballCarrier=b; if(typeof moveBallTo==='function') moveBallTo(b,'left'); }
+      setTimeout(()=>{ PX._l3s1=true; }, 1500); }
+    steps.push({
+      instruction:'Time is running out — take your shot! Tap a spot in the goal, then press SHOOT.',
+      bannerSide:'top', skipDimPhase:true, highlight:null, allowedSelectors:['#pxShootZone','#pxShootBtn'],
+      onEnter:function(){ PX._l3s1=false; PX.setShotClock(5); PX.tickShotClock(5, 1, 800); blueShotAtWhite({ saveBounce:true, onResult:resolveShot1 }); },
+      validate:{ type:'custom', fn:()=> PX._l3s1===true },
+      autoComplete:function(){ if(PX.shoot&&PX.shoot.cancel) PX.shoot.cancel(); resolveShot1(); }
+    });
+
+    // 3.4 Attacking team keeps the ball -> clock resets to 18
+    steps.push(watch('Blue kept possession after the rebound. In certain situations where the attacking team keeps the ball, the clock is reset to 18 seconds — not always, but in cases like this one.',
+      ()=>{ PX.showShotClock(18); PX.flash('SHOT CLOCK — 18','',1500); }));
+
+    // 3.5 YOU TRY — shoot again: the keeper CATCHES and holds it (possession changes)
+    function resolveSave2(){ if(PX._l3save) return;
+      const wg=whiteGoalie(); if(wg){ if(typeof ballCarrier!=='undefined') ballCarrier=wg; if(typeof moveBallTo==='function') moveBallTo(wg,'right'); }
+      PX.flash('The goalkeeper caught the ball','save'); setTimeout(()=>{ PX._l3save=true; }, 1300); }
+    steps.push({
+      instruction:'Shoot again — tap a spot and press SHOOT. Watch what the goalkeeper does this time.',
+      bannerSide:'top', skipDimPhase:true, highlight:null, allowedSelectors:['#pxShootZone','#pxShootBtn'],
+      onEnter:function(){ PX._l3save=false; PX.setShotClock(9); blueShotAtWhite({ saveBounce:false, onResult:resolveSave2 }); },
+      validate:{ type:'custom', fn:()=> PX._l3save===true },
+      autoComplete:function(){ if(PX.shoot&&PX.shoot.cancel) PX.shoot.cancel(); resolveSave2(); }
+    });
+    // 3.5b Question — who has possession now? (correct: White)
+    steps.push({
+      instruction:'The goalkeeper caught the ball. Who has possession now?',
+      bannerSide:'top', skipDimPhase:true, highlight:null,
+      onEnter:function(){ PX._l3q=false;
+        PX.choice.ask({ options:[{label:'BLUE',value:'blue'},{label:'WHITE',value:'white'}], correct:'white',
+          onAnswer:function(v,ok){ if(ok){ PX.choice.clear(); PX.flash('Correct — the goalkeeper caught it,\nso White begins a new possession.','good'); PX.showShotClock(28); setTimeout(()=>{ PX._l3q=true; }, 2000); } } });
+      },
+      validate:{ type:'custom', fn:()=> PX._l3q===true },
+      autoComplete:function(){ PX.choice.clear(); PX.flash('Correct — White begins a new possession','good'); PX.showShotClock(28); setTimeout(()=>{ PX._l3q=true; }, 1500); }
+    });
+
+    // 3.6 YOU TRY — interception: drag a Blue defender into White's passing lane
+    function setupIntercept(){
+      const whites=whiteFields(), blues=blueFields();
+      const passer=whites[0], receiver=whites[1], def=blues[0];
+      if(!passer||!receiver||!def) return;
+      setPlayer(passer, 12, 8.5, 'v', 90); setPlayer(receiver, 12, 15.5, 'v', 90);
+      if(typeof ballCarrier!=='undefined') ballCarrier=passer; if(typeof moveBallTo==='function') moveBallTo(passer,'left');
+      setPlayer(def, 14.5, 12, 'v', 270);
+      intDef=def; intTarget={x:12, y:12};
+      PX.clearSelections(); if(typeof setSelected==='function') setSelected(def, true);
+      spotlightBetween(+def.dataset.x, +def.dataset.y, intTarget.x, intTarget.y, false);
+    }
+    const step36 = {
+      instruction:'White is about to pass between two players. Drag the highlighted Blue defender into the passing lane to intercept it.',
+      bannerSide:'top', skipDimPhase:true, highlight:null,
+      allowedSelectors:function(){ return intDef ? ['.player[data-label="'+intDef.dataset.label+'"]', '#directionPad'] : ['#directionPad']; },
+      onEnter:function(){ PX.showShotClock(28); setupIntercept();
+        if(intDef) step36.ghost={ type:'playerPosition', targetPlayer:{ team:intDef.dataset.team, pose:intDef.dataset.pose, rot:+intDef.dataset.rot||0, x:intTarget.x, y:intTarget.y, label:intDef.dataset.label } };
+      },
+      validate:{ type:'custom', fn:function(){ if(!intDef||!intTarget) return false; return Math.hypot((+intDef.dataset.x)-intTarget.x, (+intDef.dataset.y)-intTarget.y) <= 1.2; } },
+      autoComplete:function(){ if(intDef){ swim(intDef, {x:intTarget.x, y:intTarget.y}, 700); } PX.clearSelections(); }
+    };
+    steps.push(step36);
+
+    // 3.6b The interception plays out — ball to Blue, new possession 28
+    steps.push(animatedWatch('Intercepted! By reading the pass, Blue wins the ball and starts a brand-new possession.',
+      function(){ PX.clearSelections();
+        return (async function(){
+          const def=intDef||blueFields()[0]; const passer=whiteFields()[0];
+          if(passer && typeof ball!=='undefined' && ball){ moveBallTo(passer,'left'); }
+          await passBallTo(def, 500);
+          if(typeof ballCarrier!=='undefined') ballCarrier=def; if(typeof moveBallTo==='function') moveBallTo(def,'left');
+          PX.showShotClock(28); PX.flash('BLUE POSSESSION — 28','good',1600);
+          await delay(300);
+        })();
+      }));
+
+    // 3.7 Shot clock expires — possession changes on the buzzer
+    steps.push(animatedWatch('This time Blue can’t create a shot in time. Watch the clock run out …',
+      function(){ PX.tickShotClock(4, 0, 700);
+        return delay(3200).then(()=>{ if(typeof PX.whistle==='function') PX.whistle(); PX.flash('SHOT CLOCK EXPIRED','whistle',1400); }); }));
+    steps.push(watch('When the shot clock runs out before a shot, possession simply passes to the other team.',
+      ()=>{ /* headline already shown */ }));
+
+    // 3.8 Lesson 3 wrap-up
+    steps.push(watch('That’s the end of Lesson 3. You now understand the shot clock: each possession is limited in time, it can reset in certain situations, and it passes to the other team on a change of possession or when it runs out.',
+      ()=>{ PX.hideShotClock(); PX.flash('LESSON 3 COMPLETE','good'); }));
+
+    return steps;
+  };
+
   /* --------------------------------------- swim-off choreography (promise) */
   async function runSwimOff(){
     PX.clearSelections();   // drop the swim-off drag selection so the D-pad hides
@@ -11902,29 +12055,34 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     if(document.getElementById('pxEndScreen')) return;
     const ov=make('div'); ov.id='pxEndScreen';
     // Same XquiX palette as the start screen (teal / grey / white).
-    ov.style.cssText='position:fixed;inset:0;z-index:9800;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;color:#fff;'
+    // pointer-events:auto is REQUIRED here — the tutorial engine's interaction
+    // lock (body.tutorialLockActive * { pointer-events:none }) is still active
+    // behind this dialog, and an inline value overrides that universal rule so
+    // the dialog's own buttons stay clickable.
+    ov.style.cssText='position:fixed;inset:0;z-index:9800;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;color:#fff;pointer-events:auto;'
       +'background:radial-gradient(circle at 50% 38%, #1b7373 0%, #0f4747 56%, #0b2b2b 100%);';
     const title=make('div'); title.textContent = kind==='complete' ? 'Water Polo — made easy!  You’ve finished the tutorial.' : 'Leave the tutorial?';
     title.style.cssText='font:900 clamp(22px,5.5vw,40px)/1.2 system-ui;margin-bottom:24px;max-width:92%;';
     ov.appendChild(title);
-    const row=make('div'); row.style.cssText='display:flex;gap:14px;flex-wrap:wrap;justify-content:center;';
-    const restart=make('button'); restart.textContent='Restart tutorial';
-    restart.style.cssText='font:800 18px system-ui;color:#fff;background:#1b7373;border:2px solid #4bb8bd;border-radius:999px;padding:14px 34px;cursor:pointer;';
-    restart.addEventListener('click', ()=>{ ov.remove(); PX.restartWp(); });
-    row.appendChild(restart);
-    if(kind!=='complete'){ const back=make('button'); back.textContent='Keep going';
-      back.style.cssText='font:800 18px system-ui;color:#0b2b2b;background:#4bb8bd;border:none;border-radius:999px;padding:14px 34px;cursor:pointer;';
-      back.addEventListener('click', ()=>{ ov.remove(); PX.showNav(); }); row.appendChild(back);
+    const row=make('div'); row.style.cssText='display:flex;gap:14px;flex-wrap:wrap;justify-content:center;pointer-events:auto;';
+    // Button helper: inline pointer-events:auto (beats the lock) + fires on both
+    // pointerup and click (touch devices sometimes suppress click).
+    const dlgBtn=(label,css,fn)=>{ const b=make('button'); b.textContent=label;
+      b.style.cssText=css+';pointer-events:auto;touch-action:manipulation;';
+      const h=function(ev){ if(ev){ ev.preventDefault(); ev.stopPropagation(); } if(b._pxLock) return; b._pxLock=true; fn(); };
+      b.addEventListener('pointerup',h); b.addEventListener('click',h); return b; };
+    row.appendChild(dlgBtn('Restart tutorial','font:800 18px system-ui;color:#fff;background:#1b7373;border:2px solid #4bb8bd;border-radius:999px;padding:14px 34px;cursor:pointer', ()=>{ ov.remove(); PX.restartWp(); }));
+    if(kind!=='complete'){
+      row.appendChild(dlgBtn('Keep going','font:800 18px system-ui;color:#0b2b2b;background:#4bb8bd;border:none;border-radius:999px;padding:14px 34px;cursor:pointer', ()=>{ ov.remove(); PX.showNav(); }));
       // "Move to next lesson" lives here (rarely needed) rather than cluttering the nav.
-      const nextLes=make('button'); nextLes.textContent='Move to next lesson →';
-      nextLes.style.cssText='font:800 18px system-ui;color:#fff;background:#1a6363;border:2px solid #4bb8bd;border-radius:999px;padding:14px 34px;cursor:pointer;';
-      nextLes.addEventListener('click', ()=>{ ov.remove(); PX.showNav(); PX.nextLesson(); }); row.appendChild(nextLes); }
+      row.appendChild(dlgBtn('Move to next lesson →','font:800 18px system-ui;color:#fff;background:#1a6363;border:2px solid #4bb8bd;border-radius:999px;padding:14px 34px;cursor:pointer', ()=>{ ov.remove(); PX.showNav(); PX.nextLesson(); }));
+    }
     ov.appendChild(row);
     document.body.appendChild(ov);
   };
   PX.restartWp = function(){
     const e=document.getElementById('pxEndScreen'); if(e) e.remove();
-    PX.hideNav();
+    PX.hideNav(); PX.hideShotClock();
     if(typeof tutorialModeActive!=='undefined' && tutorialModeActive && typeof exitTutorial==='function') exitTutorial();
     PX.clearActors(); PX.clearReferees();
     PX.showStartScreen(beginLessons);   // back to "Water Polo made easy" start screen
@@ -11939,9 +12097,10 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     PX.exitFrontCourt();   // always start in full court (swim-off uses the whole pool)
     PX.field.setPhase('water');
     PX._swimDone=false; PX._setupDone=false; PX._gkTapped=false; PX._zonesActive=false; PX._snapshots={};
-    const l1=PX.buildLesson1Steps(), l2=PX.buildLesson2Steps();
-    PX._lessonStarts=[0, l1.length];   // Lesson 2 begins right after Lesson 1
-    const allSteps = wrapBannerReset([].concat(l1, l2));
+    PX.hideShotClock();
+    const l1=PX.buildLesson1Steps(), l2=PX.buildLesson2Steps(), l3=PX.buildLesson3Steps();
+    PX._lessonStarts=[0, l1.length, l1.length+l2.length];   // Lesson 2 / Lesson 3 start offsets
+    const allSteps = wrapBannerReset([].concat(l1, l2, l3));
     if(typeof startTutorial==='function'){
       startTutorial(allSteps, { onComplete:function(){ PX.hideNav(); PX.showWpEnd('complete'); } });
     }
