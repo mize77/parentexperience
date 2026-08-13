@@ -10951,6 +10951,26 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
         return done===true;
       }} };
   }
+  // A watch() step that shows a big headline FIRST (banner hidden), then reveals
+  // the instruction box once the headline clears — never box → headline → box.
+  function watchLeadFlash(instruction, flashText, kind, extra){
+    return { instruction, bannerSide:'top', skipDimPhase:true, highlight:null, requiresAcknowledge:true,
+      onEnter:function(){ if(extra){ try{ extra(); }catch(e){} } const bn=document.getElementById('tutorialBanner'); if(bn){ clearTimeout(PX._bannerT); bn.style.opacity='0'; } PX.flash(flashText, kind); },
+      validate:{ type:'custom', fn:()=> tutorialManualAck } };
+  }
+  // Like ackThenAnimate(), but first plays a short PREVIEW on enter (e.g. a
+  // spotlight) with the instruction box hidden, so the parent's eye lands on the
+  // visual before the box appears. previewFn should flash a headline (which keeps
+  // the banner hidden until it clears, then the box slides in). runFn runs on ack.
+  function ackThenAnimatePreview(instruction, previewFn, runFn){
+    let started=false, done=false;
+    return { instruction, bannerSide:'top', skipDimPhase:true, highlight:null, requiresAcknowledge:true,
+      onEnter:function(){ started=false; done=false; const bn=document.getElementById('tutorialBanner'); if(bn){ clearTimeout(PX._bannerT); bn.style.opacity='0'; } try{ previewFn&&previewFn(); }catch(e){} },
+      validate:{ type:'custom', fn:function(){
+        if(tutorialManualAck && !started){ started=true; let r=null; try{ r=runFn&&runFn(); }catch(e){} if(r&&typeof r.then==='function') r.then(()=>{ done=true; }); else done=true; }
+        return done===true;
+      }} };
+  }
 
   PX.buildLesson1Steps = function(){
     const steps=[];
@@ -11861,16 +11881,18 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     const steps=[];
     let intDef=null, intTarget=null, intPasser=null, l3Center=null;
 
-    // 3.1 (Step 47) New possession — Blue attacks the white goal. The camera follows
-    // the ball as the teams swim over; the shot clock blends in with a red spotlight.
-    steps.push(ackThenAnimate('A team cannot keep the ball forever. Each new possession starts with a shot clock — up to 28 seconds to create a shot. It runs whenever the ball is in play and only pauses for a foul or after a goal. The view follows the play automatically; you can also swipe along the screen edges to look around.',
-      function(){ PX.enterFrontCourt(); PX.hideShotClock(); PX.followBall(true);
-        PX.showShotClock(28); PX.highlightShotClock(3400); PX.flash('SHOT CLOCK — 28','',1500);
+    // 3.1 (Step 47) New possession — Blue attacks the white goal. FIRST the shot
+    // clock blends in with a spotlight + red frame (banner hidden), THEN the
+    // instruction appears; on "Got it" the teams swim over and the clock runs down.
+    steps.push(ackThenAnimatePreview('A team cannot keep the ball forever. Each new possession starts with a shot clock — up to 28 seconds to create a shot. It runs whenever the ball is in play and only pauses for a foul or after a goal. The view follows the play automatically; you can also swipe along the screen edges to look around.',
+      function(){ PX.enterFrontCourt(); PX.hideShotClock(); PX.followBall(false);
+        PX.showShotClock(28); PX.highlightShotClock(4200); PX.flash('SHOT CLOCK — 28',''); },   // spotlight + red frame land first
+      function(){ PX.enterFrontCourt(); PX.followBall(true);
         PX.tickShotClock(28, 24, 850);   // the clock is alive and runs down as the teams swim over
         return PX.setupWhiteHalf().then(()=>{ PX.centerOnBall(); }); }));
 
-    // 3.2 (Step 48) Passing to create a chance, clock keeps ticking down
-    steps.push(animatedWatch('During those seconds the team passes and moves to create the best possible scoring chance.',
+    // 3.2 (Step 48) The offense sets up and tries to create scoring chances; clock ticks down
+    steps.push(animatedWatch('During their attacking time the offensive team is setting up and tries to create scoring opportunities.',
       function(){ PX.enterFrontCourt(); PX.followBall(true); PX.tickShotClock(24, 14, 300); return bluePassRoutine(); }));
 
     // 3.3 (Step 49) YOU TRY — tap SHOOT: the keeper blocks it, the ball drops to Blue's center
@@ -11887,7 +11909,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     });
 
     // 3.4 (Step 50) The clock resets to 18
-    steps.push(watch('Blue kept possession after the rebound. The shot clock is reset to 18 seconds — except if there would have been more time still left on it.',
+    steps.push(watch('Blue kept possession after the rebound. The shot clock is reset to 18 seconds — except there is still more time on it.',
       ()=>{ PX.enterFrontCourt(); PX.followBall(true); PX.centerOnBall(); PX.showShotClock(18); PX.flash('SHOT CLOCK — 18','',1500); }));
 
     // 3.5 (Step 51) The ball is worked around (#7→#4→#2, keeper slides sideways),
@@ -11924,14 +11946,26 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     // line between White #2 and White #3.
     async function swimToInterceptSetup(){
       const whites=whiteFields(), blues=blueFields();
-      const carrier = whiteByCap(2) || whites[0];
-      const receiver = whiteByCap(3) || whites.filter(w=>w!==carrier)[0];
-      const restW = whites.filter(w=>w!==carrier && w!==receiver);
-      const zAssign=[{z:'z2',w:carrier},{z:'z3',w:receiver}];
-      ['z1','z4','z5'].forEach((z,i)=>{ if(restW[i]) zAssign.push({z:z, w:restW[i]}); });
-      const centerW = restW[3];
+      const carrier = whiteByCap(2) || whites[0];                          // White #2 -> zone 4 (ends with the ball)
+      const receiver = whiteByCap(3) || whites.filter(w=>w!==carrier)[0];  // White #3 -> zone 3
+      const rest = whites.filter(w=>w!==carrier && w!==receiver);
+      const rightWing = rest[0];                                          // carries the ball up to zone 5
+      const otherW = rest.slice(1);
+      const centerW = otherW[2];
+      // Zone couples (attacker + 1 m goal-side blue marker). blues[idx] marks zAssign[idx].
+      const zAssign=[{z:'z4',w:carrier},{z:'z3',w:receiver},{z:'z5',w:rightWing}];
+      ['z1','z2'].forEach((z,i)=>{ if(otherW[i]) zAssign.push({z:z, w:otherW[i]}); });
+      const wgk=whiteGoalie(), bgk=blueGoalie();
+      // The White keeper controlled the save -> it starts this attack with the ball.
+      if(wgk){ if(typeof ballCarrier!=='undefined') ballCarrier=wgk; if(typeof moveBallTo==='function') moveBallTo(wgk,'right'); }
       const anims=[], usedB=[];
       zAssign.forEach(function(pa, idx){
+        if(pa.w===rightWing) { // the right wing is choreographed separately (below) with the ball
+          const dirx=BLUE_GOAL.x-zoneCentroid('z5').x, diry=BLUE_GOAL.y-zoneCentroid('z5').y, dl=Math.hypot(dirx,diry)||1;
+          const c=zoneCentroid('z5'); const dp={ x:c.x+dirx/dl, y:c.y+diry/dl }; const b=blues[idx]; usedB.push(b);
+          if(b) anims.push(swimSettle(b, dp, 3200, faceTo(dp.x,dp.y, c.x,c.y), 'v'));
+          return;
+        }
         const c=zoneCentroid(pa.z);
         anims.push(swimSettle(pa.w, c, 2600, faceTo(c.x,c.y, BLUE_GOAL.x,BLUE_GOAL.y), 'v'));   // White attacker faces the blue goal
         const dirx=BLUE_GOAL.x-c.x, diry=BLUE_GOAL.y-c.y, dl=Math.hypot(dirx,diry)||1;
@@ -11939,18 +11973,30 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
         const b=blues[idx]; usedB.push(b);
         if(b) anims.push(swimSettle(b, dp, 2600, faceTo(dp.x,dp.y, c.x,c.y), 'v'));
       });
-      if(centerW){ const cW={ x:BLUE_GOAL.x+2.5, y:CY }; const bp=zoneCentroid('z2');
+      if(centerW){ const cW={ x:BLUE_GOAL.x+2.5, y:CY }; const bp=zoneCentroid('z4');
         anims.push(swimSettle(centerW, cW, 2600, faceTo(cW.x,cW.y, bp.x,bp.y), 'v'));
         const cd=blues.filter(b=>usedB.indexOf(b)<0)[0]; if(cd){ const hug=hugCenterSpot({dataset:{x:cW.x,y:cW.y}}, BLUE_GOAL); anims.push(swimSettle(cd, {x:hug.x,y:hug.y}, 2600, hug.rot, 'h')); } }
-      const bgk=blueGoalie(), wgk=whiteGoalie();
-      const carPt={ x:zoneCentroid('z2').x, y:zoneCentroid('z2').y };
-      if(bgk) anims.push(swimVerticalTrack(bgk, {x:BLUE_GOAL.x+0.6, y:CY}, 2600, carPt));       // Blue GK swims back to its goal
+      if(bgk) anims.push(swimVerticalTrack(bgk, {x:BLUE_GOAL.x+0.6, y:CY}, 2600, zoneCentroid('z4')));   // Blue GK swims back to its goal
       if(wgk) anims.push(swimSettle(wgk, {x:WHITE_GOAL.x-4, y:CY}, 2600, 270, 'h'));
-      if(typeof ballCarrier!=='undefined') ballCarrier=carrier;
+      // Ball routing: GK -> right wing (at the middle line) -> the wing carries it to
+      // zone 5 -> passes to White #2 in zone 4.
+      const routing = (async function(){
+        if(!rightWing || !carrier) return;
+        const midPt={ x:MID_X, y:CY+3.5 };                                   // the wing comes up the (right) lower side
+        await swimSettle(rightWing, midPt, 1300, faceTo(midPt.x,midPt.y, BLUE_GOAL.x,BLUE_GOAL.y), 'h');
+        await passBallTo(rightWing, 500);                                    // keeper -> right wing at the middle line
+        if(typeof ballCarrier!=='undefined') ballCarrier=rightWing; if(typeof moveBallTo==='function') moveBallTo(rightWing,'left');
+        const z5=zoneCentroid('z5');
+        await swimSettle(rightWing, z5, 1300, faceTo(z5.x,z5.y, BLUE_GOAL.x,BLUE_GOAL.y), 'v');   // continues into zone 5
+        if(typeof moveBallTo==='function') moveBallTo(rightWing,'left');
+        await delay(150);
+        await passBallTo(carrier, 600);                                      // zone 5 -> White #2 in zone 4
+        if(typeof ballCarrier!=='undefined') ballCarrier=carrier; if(typeof moveBallTo==='function') moveBallTo(carrier,'left');
+      })();
       await Promise.all(anims);
-      if(typeof moveBallTo==='function') moveBallTo(carrier, 'left');
-      gkTrackBall(bgk, carPt);   // Blue keeper settles into a smart blocking position (within the posts)
-      return { carrier:carrier, receiver:receiver, def:blues[1] };   // blues[1] marks the receiver (zone 3)
+      await routing;
+      gkTrackBall(bgk, {x:+carrier.dataset.x, y:+carrier.dataset.y});   // Blue keeper: smart blocking position vs the ball (within the posts)
+      return { carrier:carrier, receiver:receiver, def:blues[1] };       // blues[1] marks the receiver (zone 3)
     }
     const step53 = {
       instruction:'Now White attacks the other goal, working the ball around the pool. White #2 is about to pass to White #3 — drag the highlighted Blue defender into that passing line to intercept it.',
@@ -11987,11 +12033,11 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
         })();
       }));
 
-    // 3.6c Blue builds a new attack — teams swim over, 6 passes (receivers ease back),
-    // the clock runs down to 3; only THEN does step 55 blend in.
+    // 3.6c (Step 55) Blue builds a new attack — teams swim over (clock 28 -> 14),
+    // then 6 passes take it 14 -> 3 at double real-time speed. Holds at 3.
     steps.push(animatedWatch('Blue now builds a new attack, working the ball patiently around the pool.',
-      function(){ PX.followBall(true);
-        return PX.setupWhiteHalf().then(()=>{ PX.showShotClock(28); PX.centerOnBall(); PX.tickShotClock(28, 3, 900);
+      function(){ PX.followBall(true); PX.showShotClock(28); PX.tickShotClock(28, 14, 250);   // runs down to 14 while swimming over
+        return PX.setupWhiteHalf().then(()=>{ PX.centerOnBall(); PX.tickShotClock(14, 3, 500);   // 14 -> 3 across the 6 passes (double speed)
           return (async function(){
             const b=blueFields(); const seq=[]; for(let i=0;i<6;i++) seq.push(b[i%(b.length||1)]);
             for(const t of seq){ if(!t) continue;
@@ -12000,40 +12046,44 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
               if(typeof moveBallTo==='function') moveBallTo(t,'left');
               await delay(110);
             }
-            PX.setShotClock(3);   // hold at 3 — the last seconds run out in step 55
+            PX.setShotClock(3);   // hold at 3 — the last seconds run out in step 56
           })();
         });
       }));
 
-    // 3.7 (Step 55) Blue finds no shot — CONFIRM, then watch the last 3 seconds run
+    // 3.7 (Step 56) Blue finds no shot — CONFIRM, then watch the last 3 seconds run
     // out: SHOT CLOCK EXPIRED, then the whistle.
     steps.push(ackThenAnimate('This time the Blue team can’t find an opening to finish with a shot. Watch the shot clock — the last three seconds are about to run out.',
       function(){ PX.followBall(true); PX.setShotClock(3); PX.tickShotClock(3, 0, 1000);
         return delay(3300).then(()=>{ PX.flash('SHOT CLOCK EXPIRED','whistle',1500);
           return delay(1100).then(()=>{ if(typeof PX.whistle==='function'){ try{ PX.whistle(); }catch(e){} } PX.flash('WHISTLE','whistle',1300); }); }); }));
 
-    // 3.7b (Step 56) Turnover — the nearest White player swims to the ball and takes
-    // possession, vertical, holding it on the arm away from the nearest opponent.
-    steps.push(animatedWatch('The ball turns over to White. The White player closest to the ball swims across and takes possession.',
+    // 3.7b (Step 57) Turnover — the nearest White player swims to the ball, takes
+    // possession, and moves ~2 m clear of the opponent to secure it (ball on the far arm).
+    steps.push(animatedWatch('The ball turns over to White. The nearest White player swims to the ball, takes possession, and moves clear of his opponent to secure it.',
       function(){ PX.followBall(true);
         return (async function(){
           const bx=(typeof ball!=='undefined'&&ball)?+ball.dataset.x:MID_X, by=(typeof ball!=='undefined'&&ball)?+ball.dataset.y:CY;
           const w=whiteFields().sort((a,b)=>Math.hypot(+a.dataset.x-bx,+a.dataset.y-by)-Math.hypot(+b.dataset.x-bx,+b.dataset.y-by))[0] || whiteFields()[0];
           if(w){ await swimSettle(w, {x:bx,y:by}, 900, faceTo(bx,by, BLUE_GOAL.x,BLUE_GOAL.y), 'v');   // swim to the ball, settle vertical
             if(typeof ballCarrier!=='undefined') ballCarrier=w;
-            const opp=nearestBlue(w); const hand=(opp && (+opp.dataset.y) < (+w.dataset.y)) ? 'right' : 'left';   // ball on the arm away from the opponent
+            const opp=nearestBlue(w);
+            if(opp){ let dx=(+w.dataset.x)-(+opp.dataset.x), dy=(+w.dataset.y)-(+opp.dataset.y); const dl=Math.hypot(dx,dy)||1; dx/=dl; dy/=dl;
+              const secure={ x:(+w.dataset.x)+dx*2.0, y:(+w.dataset.y)+dy*2.0 };
+              await swimSettle(w, secure, 800, faceTo(secure.x,secure.y, BLUE_GOAL.x,BLUE_GOAL.y), 'v'); }   // move ~2 m away to secure
+            const opp2=nearestBlue(w); const hand=(opp2 && (+opp2.dataset.y) < (+w.dataset.y)) ? 'right' : 'left';   // ball on the arm away from the opponent
             if(typeof moveBallTo==='function') moveBallTo(w, hand); }
-          PX.showShotClock(28); PX.flash('WHITE POSSESSION — 28','good',1500); await delay(300);
+          PX.showShotClock(28); PX.flash('WHITE IN POSSESSION','good'); await delay(300);
         })();
       }));
 
-    // 3.7c (Step 57) The rule behind the turnover.
-    steps.push(watch('When the shot clock runs out, possession turns over to the other team. The player closest to the ball takes it — unless he is already ahead of the ball, breaking toward the other goal on the attack; then he keeps going rather than turning back for it.',
+    // 3.7c (Step 58) The rule behind the turnover (and the clock's new 28 seconds).
+    steps.push(watch('The shot clock is set to a new 28 seconds for White. When the clock runs out, the player closest to the ball must take it — unless he is already ahead of the ball, breaking toward the other goal on the attack; then he keeps going rather than turning back for it.',
       ()=>{ PX.followBall(false); }));
 
-    // 3.8 Lesson 3 wrap-up — learning points as a bullet list
-    steps.push(watch('UNDERSTAND\n• Every possession has a shot clock — up to 28 seconds to get a shot away.\n• The clock runs while the ball is in play and pauses only for a foul or after a goal.\n• Keeping the ball (like an offensive rebound) resets it to 18 seconds — unless more time was left.\n• A blocked-and-controlled save, an interception, or the clock expiring all turn the ball over.\n• On a turnover the nearest player takes the ball — unless he is already breaking away on attack.',
-      ()=>{ PX.followBall(false); PX.hideShotClock(); PX.flash('LESSON 3 COMPLETE','good'); }));
+    // 3.8 (Step 59) Lesson 3 wrap-up — LESSON 3 COMPLETE headline FIRST, then the bullets.
+    steps.push(watchLeadFlash('UNDERSTAND\n• Every possession has a shot clock — up to 28 seconds to get a shot away.\n• The clock runs while the ball is in play and pauses only for a foul or after a goal.\n• Keeping the ball (like an offensive rebound) resets it to 18 seconds — unless more time was left.\n• A blocked-and-controlled save, an interception, or the clock expiring all turn the ball over.\n• On a turnover the nearest player takes the ball — unless he is already breaking away on attack.',
+      'LESSON 3 COMPLETE', 'good', ()=>{ PX.followBall(false); PX.hideShotClock(); }));
 
     return steps;
   };
@@ -12092,6 +12142,9 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       + ' body.pxParentMode #shotClockLeft{ display:none !important; }'
       + ' body.pxParentMode .shotClockMiniControls{ display:none !important; }'
       + ' body.pxParentMode #shotClockRight.shotClockViewportFixed{ left:50% !important; right:auto !important; transform:translateX(-50%) !important; }'
+      // Make the parent shot clock about twice as large (more prominent).
+      + ' body.pxParentMode #shotClockRight{ padding:12px 22px !important; border-radius:16px !important; }'
+      + ' body.pxParentMode #shotClockRight .shotClockNumber{ font-size:52px !important; }'
       // Big headline flashes: on phones (short height) center them vertically so tall text is never clipped.
       + ' body.pxParentMode.pxTouch #pxFlash{ top:46% !important; }';
     document.head.appendChild(s);
