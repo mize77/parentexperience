@@ -11769,111 +11769,201 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       }
     })();
   }
-  // A Blue shot at the WHITE (right) goal — always a save, so the story stays in
-  // Lesson 3's possession thread. saveBounce leaves a loose ball for a rebound.
-  function blueShotAtWhite(opts){
-    opts=opts||{};
-    const carrier=(typeof ballCarrier!=='undefined'&&ballCarrier&&ballCarrier.dataset.team==='blue')?ballCarrier:blueFields()[0];
-    if(carrier){ if(typeof ballCarrier!=='undefined') ballCarrier=carrier; if(typeof moveBallTo==='function') moveBallTo(carrier,'left'); }
-    PX.shoot.begin({ side:'right', subtleZone:true, forceSave:true, saveBounce:!!opts.saveBounce, ghost:{x:WHITE_GOAL.x, y:CY}, onResult:opts.onResult });
+  /* ---------------- Lesson 3 shot helpers (SHOOT button only, no aiming) ---- */
+  PX.hideShootButton = function(){ const b=document.getElementById('pxL3ShootBtn'); if(b) b.remove(); };
+  PX.shootButton = function(onShoot){
+    PX.hideShootButton();
+    const btn=make('button'); btn.id='pxL3ShootBtn'; btn.textContent='SHOOT';
+    btn.style.cssText='position:fixed;left:50%;bottom:9%;transform:translateX(-50%);z-index:10000;font:800 22px system-ui;color:#fff;background:#c62828;border:none;border-radius:999px;padding:15px 50px;box-shadow:0 8px 26px rgba(0,0,0,.4);cursor:pointer;letter-spacing:.06em;touch-action:manipulation;pointer-events:auto;';
+    const h=function(ev){ if(ev){ ev.preventDefault(); ev.stopPropagation(); } if(btn._pxLock) return; btn._pxLock=true; btn.style.opacity='.5'; PX.hideShootButton(); if(typeof onShoot==='function') onShoot(); };
+    btn.addEventListener('pointerup',h); btn.addEventListener('click',h);
+    document.body.appendChild(btn); return btn;
+  };
+  // Animate a Blue shot at the white goal that the keeper blocks. dropTo: the player
+  // the rebound drops to; if null, the keeper controls the ball itself.
+  function animateBlockedShot(dropTo){
+    return new Promise(function(res){
+      const from=ballObj(); const wg=whiteGoalie();
+      if(typeof ballCarrier!=='undefined'){ try{ ballCarrier=null; }catch(e){} }
+      const kx = wg? +wg.dataset.x : (WHITE_GOAL.x-0.6), ky = wg? +wg.dataset.y : CY;
+      const blockPt={ x:kx-0.4, y: from.y+(ky-from.y)*0.85 };
+      tween((x,y)=>{ if(typeof ball!=='undefined'&&ball){ ball.dataset.x=x; ball.dataset.y=y; if(typeof placeBall==='function') placeBall(); } if(wg){ wg.dataset.rot=faceTo(+wg.dataset.x,+wg.dataset.y,x,y); if(typeof place==='function') place(wg); } }, from, blockPt, 470, ()=>{
+        if(dropTo){
+          tween((x,y)=>{ if(typeof ball!=='undefined'&&ball){ ball.dataset.x=x; ball.dataset.y=y; if(typeof placeBall==='function') placeBall(); } }, blockPt, {x:+dropTo.dataset.x, y:+dropTo.dataset.y}, 520, ()=>{
+            if(typeof ballCarrier!=='undefined') ballCarrier=dropTo; if(typeof moveBallTo==='function') moveBallTo(dropTo,'left'); res(); });
+        } else {
+          if(wg){ if(typeof ballCarrier!=='undefined') ballCarrier=wg; if(typeof moveBallTo==='function') moveBallTo(wg,'right'); } res();
+        }
+      });
+    });
+  }
+  // Blend the shot clock in with a red-ring spotlight (used when it first appears).
+  PX.highlightShotClock = function(ms){
+    const sc=document.getElementById('shotClockRight'); if(!sc) return;
+    sc.style.transition='opacity .5s ease'; sc.style.opacity='0'; requestAnimationFrame(()=>requestAnimationFrame(()=>{ sc.style.opacity='1'; }));
+    let ring=document.getElementById('pxSCHi'); if(!ring){ ring=make('div'); ring.id='pxSCHi';
+      ring.style.cssText='position:fixed;z-index:9302;pointer-events:none;border:3px solid #e8362a;border-radius:14px;box-shadow:0 0 0 6px rgba(232,54,42,.28), 0 0 0 3000px rgba(6,20,35,.28);animation:pxGoalPulse 1.1s ease-in-out infinite;';
+      document.body.appendChild(ring); }
+    const r=sc.getBoundingClientRect(); const pad=8; ring.style.left=(r.left-pad)+'px'; ring.style.top=(r.top-pad)+'px'; ring.style.width=(r.width+pad*2)+'px'; ring.style.height=(r.height+pad*2)+'px'; ring.style.display='block';
+    if(PX._scHiT) clearTimeout(PX._scHiT); PX._scHiT=setTimeout(()=>{ const e=document.getElementById('pxSCHi'); if(e) e.remove(); }, ms||3400);
+  };
+  function capNumOf(el){ const n=el&&el.querySelector?el.querySelector('.capNumber'):null; return n?n.textContent:''; }
+  function blueByCap(cap){ return blueFields().find(p=>capNumOf(p)===String(cap)) || null; }
+  // A pass sequence among the given players; the white keeper tracks the ball and
+  // slides sideways along its line (smart goalkeeping), not just spinning.
+  function passSeqSmartGK(seq){
+    const wg=whiteGoalie(), goalY=CY;
+    return (async function(){
+      for(const t of seq){ if(!t || typeof ball==='undefined' || !ball) continue;
+        await new Promise(res=>{
+          const from={x:+ball.dataset.x,y:+ball.dataset.y}, to={x:+t.dataset.x,y:+t.dataset.y};
+          if(typeof ballCarrier!=='undefined') ballCarrier=null;
+          tween((x,y)=>{ ball.dataset.x=x; ball.dataset.y=y; if(typeof placeBall==='function') placeBall();
+            if(wg){ const gy=goalY+(y-goalY)*0.42; wg.dataset.y=Math.max(goalY-2.4,Math.min(goalY+2.4,gy)); wg.dataset.rot=faceTo(+wg.dataset.x,+wg.dataset.y,x,y); if(typeof place==='function') place(wg); }
+          }, from, to, 600, ()=>{ if(typeof moveBallTo==='function') moveBallTo(t,'left'); res(); });
+        });
+        await delay(140);
+      }
+    })();
   }
 
   PX.buildLesson3Steps = function(){
     const steps=[];
-    let intDef=null, intTarget=null;   // interception-drag state
+    let intDef=null, intTarget=null, intPasser=null, l3Center=null;
 
-    // 3.1 New possession — Blue attacks the white goal, shot clock at 28.
-    // Lesson 3 stays in FRONT COURT; the view auto-follows the ball so the parent
-    // doesn't have to swipe to keep up (they still can, along the screen edges).
-    steps.push(ackThenAnimate('A team cannot keep the ball forever. Each new possession starts with a shot clock — up to 28 seconds to create a shot. The view will follow the play automatically; you can also swipe up or down along the screen edges to look around.',
-      function(){ PX.enterFrontCourt(); PX.hideShotClock(); return PX.setupWhiteHalf().then(()=>{ PX.showShotClock(28); PX.centerOnBall(); PX.followBall(true); PX.flash('SHOT CLOCK — 28','',1500); }); }));
+    // 3.1 (Step 47) New possession — Blue attacks the white goal. The camera follows
+    // the ball as the teams swim over; the shot clock blends in with a red spotlight.
+    steps.push(ackThenAnimate('A team cannot keep the ball forever. Each new possession starts with a shot clock — up to 28 seconds to create a shot. The view follows the play automatically; you can also swipe along the screen edges to look around.',
+      function(){ PX.enterFrontCourt(); PX.hideShotClock(); PX.followBall(true);
+        return PX.setupWhiteHalf().then(()=>{ PX.showShotClock(28); PX.centerOnBall(); PX.highlightShotClock(3400); PX.flash('SHOT CLOCK — 28','',1500); }); }));
 
-    // 3.2 Creating the shot — Blue passes, clock ticks down
+    // 3.2 (Step 48) Passing to create a chance, clock ticks down
     steps.push(animatedWatch('During those seconds the team passes and moves to create the best possible scoring chance.',
       function(){ PX.enterFrontCourt(); PX.followBall(true); PX.tickShotClock(28, 14, 260); return bluePassRoutine(); }));
 
-    // 3.3 YOU TRY — beat the clock: shoot (saved, Blue keeps the rebound)
-    function resolveShot1(){ if(PX._l3s1) return; PX.flash('Saved — but Blue grabs the rebound','save');
-      const b=blueFields()[0]; if(b){ if(typeof ballCarrier!=='undefined') ballCarrier=b; if(typeof moveBallTo==='function') moveBallTo(b,'left'); }
-      setTimeout(()=>{ PX._l3s1=true; }, 1500); }
+    // 3.3 (Step 49) YOU TRY — tap SHOOT: the keeper blocks it, the ball drops to Blue's center
+    function resolveShot1(){ if(PX._l3s1) return; PX._l3s1='running';
+      l3Center = blueByCap(7) || blueFields()[0];
+      animateBlockedShot(l3Center).then(()=>{ PX.flash('Blocked! The rebound drops to Blue','save'); setTimeout(()=>{ PX._l3s1=true; }, 1500); });
+    }
     steps.push({
-      instruction:'Time is running out — take your shot! Tap a spot in the goal, then press SHOOT.',
-      bannerSide:'top', skipDimPhase:true, highlight:null, allowedSelectors:['#pxShootZone','#pxShootBtn'],
-      onEnter:function(){ PX.enterFrontCourt(); PX.followBall(false); PX.centerOnBall(); PX._l3s1=false; PX.setShotClock(5); PX.tickShotClock(5, 1, 800); blueShotAtWhite({ saveBounce:true, onResult:resolveShot1 }); },
+      instruction:'Time is running out — tap the SHOOT button to release the shot.',
+      bannerSide:'top', skipDimPhase:true, highlight:null, allowedSelectors:['#pxL3ShootBtn'],
+      onEnter:function(){ PX.enterFrontCourt(); PX.followBall(false); PX.centerOnBall(); PX._l3s1=false; PX.setShotClock(5); PX.tickShotClock(5, 1, 800); PX.shootButton(resolveShot1); },
       validate:{ type:'custom', fn:()=> PX._l3s1===true },
-      autoComplete:function(){ if(PX.shoot&&PX.shoot.cancel) PX.shoot.cancel(); resolveShot1(); }
+      autoComplete:function(){ PX.hideShootButton(); resolveShot1(); }
     });
 
-    // 3.4 Attacking team keeps the ball -> clock resets to 18
-    steps.push(watch('Blue kept possession after the rebound. In certain situations where the attacking team keeps the ball, the clock is reset to 18 seconds — not always, but in cases like this one.',
+    // 3.4 (Step 50) The clock resets to 18
+    steps.push(watch('Blue kept possession after the rebound. In certain situations where the attacking team keeps the ball, the clock is reset to 18 seconds — except if there would have been more time still left on it.',
       ()=>{ PX.enterFrontCourt(); PX.followBall(true); PX.centerOnBall(); PX.showShotClock(18); PX.flash('SHOT CLOCK — 18','',1500); }));
 
-    // 3.5 YOU TRY — shoot again: the keeper CATCHES and holds it (possession changes)
-    function resolveSave2(){ if(PX._l3save) return;
-      const wg=whiteGoalie(); if(wg){ if(typeof ballCarrier!=='undefined') ballCarrier=wg; if(typeof moveBallTo==='function') moveBallTo(wg,'right'); }
-      PX.flash('The goalkeeper caught the ball','save'); setTimeout(()=>{ PX._l3save=true; }, 1300); }
+    // 3.5 (Step 51) The ball is worked around (#7→#4→#2, keeper slides sideways),
+    // then YOU TRY — tap SHOOT: the keeper blocks AND controls it (possession changes)
+    function resolveSave2(){ if(PX._l3save) return; PX._l3save='running';
+      animateBlockedShot(null).then(()=>{ PX.flash('The goalkeeper blocked and controlled the ball','save'); setTimeout(()=>{ PX._l3save=true; }, 1500); });
+    }
     steps.push({
-      instruction:'Shoot again — tap a spot and press SHOOT. Watch what the goalkeeper does this time.',
-      bannerSide:'top', skipDimPhase:true, highlight:null, allowedSelectors:['#pxShootZone','#pxShootBtn'],
-      onEnter:function(){ PX.enterFrontCourt(); PX.followBall(false); PX.centerOnBall(); PX._l3save=false; PX.setShotClock(9); blueShotAtWhite({ saveBounce:false, onResult:resolveSave2 }); },
+      instruction:'The ball is worked around to open a better angle. When you see the chance, tap SHOOT.',
+      bannerSide:'top', skipDimPhase:true, highlight:null, allowedSelectors:['#pxL3ShootBtn'],
+      onEnter:function(){ PX.enterFrontCourt(); PX.followBall(true); PX._l3save=false; PX.setShotClock(12);
+        const seq=[ blueByCap(7), blueByCap(4), blueByCap(2) ].filter(Boolean);
+        passSeqSmartGK(seq.length?seq:blueFields().slice(0,3)).then(()=>{ PX.followBall(false); PX.centerOnBall(); PX.shootButton(resolveSave2); });
+      },
       validate:{ type:'custom', fn:()=> PX._l3save===true },
-      autoComplete:function(){ if(PX.shoot&&PX.shoot.cancel) PX.shoot.cancel(); resolveSave2(); }
+      autoComplete:function(){ PX.hideShootButton(); resolveSave2(); }
     });
-    // 3.5b Question — who has possession now? (correct: White)
+    // 3.5b (Step 52) Question — who has possession now? (correct: White)
     steps.push({
-      instruction:'The goalkeeper caught the ball. Who has possession now?',
+      instruction:'The goalkeeper blocked and controlled the ball. Who has possession now?',
       bannerSide:'top', skipDimPhase:true, highlight:null,
       onEnter:function(){ PX._l3q=false;
         PX.choice.ask({ options:[{label:'BLUE',value:'blue'},{label:'WHITE',value:'white'}], correct:'white',
-          onAnswer:function(v,ok){ if(ok){ PX.choice.clear(); PX.flash('Correct — the goalkeeper caught it,\nso White begins a new possession.','good'); PX.showShotClock(28); setTimeout(()=>{ PX._l3q=true; }, 2000); } } });
+          onAnswer:function(v,ok){ if(ok){ PX.choice.clear(); PX.flash('Correct — the goalkeeper controlled it,\nso White begins a new possession.','good'); PX.showShotClock(28); setTimeout(()=>{ PX._l3q=true; }, 2000); } } });
       },
       validate:{ type:'custom', fn:()=> PX._l3q===true },
       autoComplete:function(){ PX.choice.clear(); PX.flash('Correct — White begins a new possession','good'); PX.showShotClock(28); setTimeout(()=>{ PX._l3q=true; }, 1500); }
     });
 
-    // 3.6 YOU TRY — interception: drag a Blue defender into White's passing lane
-    function setupIntercept(){
+    // 3.6 (Step 53) YOU TRY — interception on the OTHER side: White (zone 2) is about
+    // to pass to zone 4; drag the Blue defender (zone 3) into that passing lane.
+    function setupInterceptOther(){
       const whites=whiteFields(), blues=blueFields();
+      const z2=zoneCentroid('z2'), z4=zoneCentroid('z4'), z3=zoneCentroid('z3');
       const passer=whites[0], receiver=whites[1], def=blues[0];
       if(!passer||!receiver||!def) return;
-      setPlayer(passer, 12, 8.5, 'v', 90); setPlayer(receiver, 12, 15.5, 'v', 90);
-      if(typeof ballCarrier!=='undefined') ballCarrier=passer; if(typeof moveBallTo==='function') moveBallTo(passer,'left');
-      setPlayer(def, 14.5, 12, 'v', 270);
-      intDef=def; intTarget={x:12, y:12};
-      PX.clearSelections(); if(typeof setSelected==='function') setSelected(def, true);
-      spotlightBetween(+def.dataset.x, +def.dataset.y, intTarget.x, intTarget.y, false);
+      setPlayer(receiver, z4.x, z4.y, 'v', faceTo(z4.x,z4.y,BLUE_GOAL.x,BLUE_GOAL.y));
+      // Blue defender starts goal-side of the z2->z4 passing lane (clearly OFF it),
+      // so the user has a real drag to make into the lane to intercept.
+      const defStart={ x:BLUE_GOAL.x+3.0, y:CY };
+      setPlayer(def, defStart.x, defStart.y, 'v', faceTo(defStart.x,defStart.y,z2.x,z2.y));
+      if(typeof ballCarrier!=='undefined') ballCarrier=passer;
+      intDef=def; intPasser=passer; intTarget={ x:(z2.x+z4.x)/2, y:(z2.y+z4.y)/2 };
+      // the passer swims across to zone 2 with the ball -> the camera follows it over
+      swim(passer, {x:z2.x, y:z2.y}, 1400, 'v').then(()=>{
+        passer.dataset.rot=faceTo(z2.x,z2.y,BLUE_GOAL.x,BLUE_GOAL.y); if(typeof place==='function') place(passer);
+        if(typeof moveBallTo==='function') moveBallTo(passer,'right');
+        PX.followBall(false); PX.centerOnBall();
+        PX.clearSelections(); if(typeof setSelected==='function') setSelected(def, true);
+        spotlightBetween(+def.dataset.x,+def.dataset.y,intTarget.x,intTarget.y,false);
+        step53.ghost={ type:'playerPosition', targetPlayer:{ team:def.dataset.team, pose:def.dataset.pose, rot:+def.dataset.rot||0, x:intTarget.x, y:intTarget.y, label:def.dataset.label } };
+      });
     }
-    const step36 = {
-      instruction:'White is about to pass between two players. Drag the highlighted Blue defender into the passing lane to intercept it.',
+    const step53 = {
+      instruction:'Now White attacks the other goal. White is about to pass from zone 2 to zone 4 — drag the highlighted Blue defender into that passing lane to intercept it.',
       bannerSide:'top', skipDimPhase:true, highlight:null,
       allowedSelectors:function(){ return intDef ? ['.player[data-label="'+intDef.dataset.label+'"]', '#directionPad'] : ['#directionPad']; },
-      onEnter:function(){ PX.enterFrontCourt(); PX.followBall(false); PX.showShotClock(28); setupIntercept(); PX.centerOnBall();
-        if(intDef) step36.ghost={ type:'playerPosition', targetPlayer:{ team:intDef.dataset.team, pose:intDef.dataset.pose, rot:+intDef.dataset.rot||0, x:intTarget.x, y:intTarget.y, label:intDef.dataset.label } };
-      },
-      validate:{ type:'custom', fn:function(){ if(!intDef||!intTarget) return false; return Math.hypot((+intDef.dataset.x)-intTarget.x, (+intDef.dataset.y)-intTarget.y) <= 1.2; } },
-      autoComplete:function(){ if(intDef){ swim(intDef, {x:intTarget.x, y:intTarget.y}, 700); } PX.clearSelections(); }
+      onEnter:function(){ PX.enterFrontCourt(); PX.followBall(true); PX.showShotClock(28); setupInterceptOther(); },
+      validate:{ type:'custom', fn:function(){ if(!intDef||!intTarget) return false; return Math.hypot((+intDef.dataset.x)-intTarget.x, (+intDef.dataset.y)-intTarget.y) <= 1.3; } },
+      autoComplete:function(){ if(intDef && intTarget){ swim(intDef, {x:intTarget.x, y:intTarget.y}, 700); } PX.clearSelections(); }
     };
-    steps.push(step36);
+    steps.push(step53);
 
-    // 3.6b The interception plays out — ball to Blue, new possession 28
-    steps.push(animatedWatch('Intercepted! By reading the pass, Blue wins the ball and starts a brand-new possession.',
+    // 3.6b (Step 54) The pass is intercepted. The INTERCEPTED headline shows FIRST
+    // (it hides the banner), then the instruction box opens once it has vanished.
+    steps.push(animatedWatch('New possession — by reading the pass, Blue wins the ball.',
       function(){ PX.clearSelections(); PX.followBall(true);
         return (async function(){
-          const def=intDef||blueFields()[0]; const passer=whiteFields()[0];
-          if(passer && typeof ball!=='undefined' && ball){ moveBallTo(passer,'left'); }
-          await passBallTo(def, 500);
+          const def=intDef||blueFields()[0]; const passer=intPasser||whiteFields()[0];
+          if(passer && typeof ball!=='undefined' && ball){ if(typeof moveBallTo==='function') moveBallTo(passer,'right'); }
+          await passBallTo(def, 560);
           if(typeof ballCarrier!=='undefined') ballCarrier=def; if(typeof moveBallTo==='function') moveBallTo(def,'left');
-          PX.showShotClock(28); PX.flash('BLUE POSSESSION — 28','good',1600);
+          PX.flash('INTERCEPTED','whistle');   // hides the banner ~2s; the instruction reappears afterwards
           await delay(300);
         })();
       }));
 
-    // 3.7 Shot clock expires — possession changes on the buzzer
-    steps.push(animatedWatch('This time Blue can’t create a shot in time. Watch the clock run out …',
-      function(){ PX.followBall(true); PX.tickShotClock(4, 0, 700);
-        return delay(3200).then(()=>{ if(typeof PX.whistle==='function') PX.whistle(); PX.flash('SHOT CLOCK EXPIRED','whistle',1400); }); }));
-    steps.push(watch('When the shot clock runs out before a shot, possession simply passes to the other team.',
-      ()=>{ /* headline already shown */ }));
+    // 3.6c Blue builds a new attack — teams swim over, 6 passes (receivers ease back),
+    // the clock runs down; only THEN does the "no shot in time" headline show.
+    steps.push(animatedWatch('Blue now builds a new attack, working the ball patiently around the pool.',
+      function(){ PX.followBall(true);
+        return PX.setupWhiteHalf().then(()=>{ PX.showShotClock(28); PX.centerOnBall(); PX.tickShotClock(28, 3, 900);
+          return (async function(){
+            const b=blueFields(); const seq=[]; for(let i=0;i<6;i++) seq.push(b[i%(b.length||1)]);
+            for(const t of seq){ if(!t) continue;
+              await passBallTo(t, 480);
+              await swim(t, { x:(+t.dataset.x)-0.7, y:+t.dataset.y }, 420);   // ease back to secure the position
+              if(typeof moveBallTo==='function') moveBallTo(t,'left');
+              await delay(110);
+            }
+          })();
+        });
+      }));
+
+    // 3.7 (Step 55) Shot clock expires
+    steps.push(animatedWatch('This time the Blue team doesn’t manage to finish with a shot in time. Watch the clock run out …',
+      function(){ PX.followBall(true); PX.tickShotClock(3, 0, 700);
+        return delay(2600).then(()=>{ if(typeof PX.whistle==='function') PX.whistle(); PX.flash('SHOT CLOCK EXPIRED','whistle',1400); }); }));
+
+    // 3.7b (Step 56) Possession changes — White takes over ball control
+    steps.push(animatedWatch('When the shot clock runs out before a shot, possession simply passes to the other team — so White takes over ball control.',
+      function(){ PX.followBall(true);
+        return (async function(){
+          const w=whiteFields()[0]; if(w){ if(typeof ball!=='undefined'&&ball){ const from={x:+ball.dataset.x,y:+ball.dataset.y}; await new Promise(res=>tween((x,y)=>{ ball.dataset.x=x; ball.dataset.y=y; if(typeof placeBall==='function') placeBall(); }, from, {x:+w.dataset.x,y:+w.dataset.y}, 600, res)); }
+            if(typeof ballCarrier!=='undefined') ballCarrier=w; if(typeof moveBallTo==='function') moveBallTo(w,'right'); }
+          PX.showShotClock(28); PX.flash('WHITE POSSESSION — 28','good',1500); await delay(300);
+        })();
+      }));
 
     // 3.8 Lesson 3 wrap-up
     steps.push(watch('That’s the end of Lesson 3. You now understand the shot clock: each possession is limited in time, it can reset in certain situations, and it passes to the other team on a change of possession or when it runs out.',
@@ -11935,7 +12025,9 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       // Shot clock: parents see ONE clock, centered at the top of the screen, with no control buttons.
       + ' body.pxParentMode #shotClockLeft{ display:none !important; }'
       + ' body.pxParentMode .shotClockMiniControls{ display:none !important; }'
-      + ' body.pxParentMode #shotClockRight.shotClockViewportFixed{ left:50% !important; right:auto !important; transform:translateX(-50%) !important; }';
+      + ' body.pxParentMode #shotClockRight.shotClockViewportFixed{ left:50% !important; right:auto !important; transform:translateX(-50%) !important; }'
+      // Big headline flashes: on phones (short height) center them vertically so tall text is never clipped.
+      + ' body.pxParentMode.pxTouch #pxFlash{ top:46% !important; }';
     document.head.appendChild(s);
   }
 
