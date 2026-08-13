@@ -11089,7 +11089,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   // scene's own onEnter then hides it and it fades back 0.5s later.
   function wrapBannerReset(steps){
     steps.forEach(s=>{ const orig=s.onEnter; s.onEnter=function(){
-      const bn=document.getElementById('tutorialBanner'); if(bn) bn.style.opacity='1'; if(PX._bannerT) clearTimeout(PX._bannerT); if(typeof orig==='function') orig.call(this); }; });
+      const bn=document.getElementById('tutorialBanner'); if(bn){ bn.style.opacity='1'; bn.classList.remove('pxWide'); } if(PX._bannerT) clearTimeout(PX._bannerT); if(typeof orig==='function') orig.call(this); }; });
     return steps;
   }
   // Capture / restore the full scene (players, ball, field phase, view, refs,
@@ -11948,7 +11948,9 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       instruction:'The ball is worked around to open a better angle. When you see the chance, tap SHOOT.',
       bannerSide:'top', skipDimPhase:true, highlight:null, allowedSelectors:['#pxL3ShootBtn'],
       onEnter:function(){ PX.enterFrontCourt(); PX.followBall(true); PX._l3save=false; PX.tickShotClock(18, 12, 360);   // runs DOWN 18->12 during the passing (no jump)
-        const seq=[ blueByCap(7), blueByCap(4), blueByCap(2) ].filter(Boolean);
+        const b7=blueByCap(7);
+        if(b7){ if(typeof ballCarrier!=='undefined') ballCarrier=b7; if(typeof moveBallTo==='function') moveBallTo(b7,'left'); }   // Blue #7 clearly secures the ball in his left hand
+        const seq=[ b7, blueByCap(4), blueByCap(2) ].filter(Boolean);
         passSeqSmartGK(seq.length?seq:blueFields().slice(0,3)).then(()=>{ PX.followBall(false); PX.centerOnBall(); PX.shootButton(resolveSave2); });
       },
       validate:{ type:'custom', fn:()=> PX._l3save===true },
@@ -12096,20 +12098,23 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       function(){ PX.followBall(true);
         return (async function(){
           const bx=(typeof ball!=='undefined'&&ball)?+ball.dataset.x:MID_X, by=(typeof ball!=='undefined'&&ball)?+ball.dataset.y:CY;
-          const w=whiteFields().sort((a,b)=>Math.hypot(+a.dataset.x-bx,+a.dataset.y-by)-Math.hypot(+b.dataset.x-bx,+b.dataset.y-by))[0] || whiteFields()[0];
+          // White #7 swims to the ball, takes possession, and carries it one metre
+          // forward toward the attacking goal — no pass in this animation.
+          const w=whiteByCap(7) || whiteFields().sort((a,b)=>Math.hypot(+a.dataset.x-bx,+a.dataset.y-by)-Math.hypot(+b.dataset.x-bx,+b.dataset.y-by))[0] || whiteFields()[0];
           if(w){ await swimSettle(w, {x:bx,y:by}, 900, faceTo(bx,by, BLUE_GOAL.x,BLUE_GOAL.y), 'v');   // swim to the ball, settle vertical
             if(typeof ballCarrier!=='undefined') ballCarrier=w;
             const opp=nearestBlue(w); const hand=(opp && (+opp.dataset.y) < (+w.dataset.y)) ? 'right' : 'left';   // ball on the arm away from the opponent
             if(typeof moveBallTo==='function') moveBallTo(w, hand);
-            await swim(w, { x:(+w.dataset.x)-2.0, y:+w.dataset.y }, 700);   // continue the play toward the attacking (blue) goal
+            await swim(w, { x:(+w.dataset.x)-1.0, y:+w.dataset.y }, 700);   // carry it one metre forward (no pass)
             if(typeof moveBallTo==='function') moveBallTo(w, hand); }
           PX.showShotClock(28); PX.flash('WHITE IN POSSESSION','good'); await delay(300);
         })();
       }));
 
-    // 3.8 (Step 58) Lesson 3 wrap-up — LESSON 3 COMPLETE headline FIRST, then the bullets.
-    steps.push(watchLeadFlash('UNDERSTAND\n• Every possession has a shot clock — up to 28 seconds to get a shot away.\n• The clock runs while the ball is in play and pauses only for a foul or after a goal.\n• Keeping the ball (like an offensive rebound) resets it to 18 seconds — unless more time was left.\n• A blocked-and-controlled save, an interception, or the clock expiring all turn the ball over.\n• On a turnover the nearest player takes the ball — unless he is already breaking away on attack.',
-      'LESSON 3 COMPLETE', 'good', ()=>{ PX.followBall(false); PX.hideShotClock(); }));
+    // 3.8 (Step 58) Lesson 3 wrap-up — LESSON 3 COMPLETE headline FIRST, then a short
+    // recap in a WIDER box so it fits in fewer lines on a phone.
+    steps.push(watchLeadFlash('UNDERSTAND\n• A shot clock limits each possession to 28 seconds.\n• It runs while the ball is live; it pauses for fouls and after goals.\n• An offensive rebound resets it to 18 seconds.\n• A save, an interception or the clock expiring turns the ball over.\n• On a turnover the closest player takes the ball.',
+      'LESSON 3 COMPLETE', 'good', ()=>{ PX.followBall(false); PX.hideShotClock(); const bn=document.getElementById('tutorialBanner'); if(bn) bn.classList.add('pxWide'); }));
 
     return steps;
   };
@@ -12173,7 +12178,10 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       + ' body.pxParentMode #shotClockRight{ padding:12px 22px !important; border-radius:16px !important; }'
       + ' body.pxParentMode #shotClockRight .shotClockNumber{ font-size:52px !important; }'
       // Big headline flashes: on phones (short height) center them vertically so tall text is never clipped.
-      + ' body.pxParentMode.pxTouch #pxFlash{ top:46% !important; }';
+      + ' body.pxParentMode.pxTouch #pxFlash{ top:46% !important; }'
+      // A wider instruction box for text-heavy steps (e.g. the lesson summary) so it fits in fewer lines.
+      + ' body.pxParentMode.pxTouch #tutorialBanner.pxWide{ max-width:94vw !important; width:min(92vw,540px) !important; }'
+      + ' body.pxParentMode #tutorialBanner.pxWide{ width:540px !important; max-width:94vw !important; }';
     document.head.appendChild(s);
   }
 
@@ -12303,11 +12311,40 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     }
   };
   PX.hideNav = function(){ const n=document.getElementById('pxNav'); if(n) n.remove(); };
+  // Rebuild the exact scene a lesson expects at its start, so SKIPPING into a lesson
+  // looks identical to reaching it by playing through (teams set up on the field,
+  // not left in whatever half-finished state the previous lesson was in).
+  PX.primeForLesson = function(startIdx){
+    const starts=PX._lessonStarts||[0]; const lesson=starts.indexOf(startIdx);   // 1 => Lesson 2, 2 => Lesson 3
+    // Tear down every transient piece of tutorial UI / animation from the old spot.
+    try{ if(PX.clearFlash) PX.clearFlash(); }catch(e){}
+    try{ clearHoldCinematic(); }catch(e){}
+    try{ if(typeof clearTutorialGhost==='function') clearTutorialGhost(); }catch(e){}
+    try{ if(PX.hideShootButton) PX.hideShootButton(); }catch(e){}
+    try{ if(PX.clearShotClockHighlight) PX.clearShotClockHighlight(); }catch(e){}
+    try{ PX.centerDuel(false); PX.setCenterDuel(null,null,null); }catch(e){}
+    try{ if(PX.followBall) PX.followBall(false); }catch(e){}
+    try{ if(PX.clearSelections) PX.clearSelections(); }catch(e){}
+    if(PX.shoot&&PX.shoot.cancel){ try{ PX.shoot.cancel(); }catch(e){} }
+    if(PX.tap&&PX.tap.disarm){ try{ PX.tap.disarm(); }catch(e){} }
+    PX._zonesActive=false;
+    // Lessons 2 & 3 both open from the offense/defense board on the field — build it
+    // fresh so the players are correctly set up (a stale 12-player board would have
+    // made ensureOffenseBoard's guard no-op and left them where the last step left them).
+    if(lesson>=1){
+      PX.clearActors(); if(PX.clearReferees) PX.clearReferees();
+      PX.field.setPhase('lines');
+      PX.ensureOffenseBoard();
+      PX._swimDone=true; PX._setupDone=true;
+      if(lesson>=2){ PX.enterFrontCourt(); } else if(PX.exitFrontCourt){ PX.exitFrontCourt(); }
+      PX.hideShotClock();
+    }
+  };
   PX.nextLesson = function(){
     const starts=PX._lessonStarts||[0];
     const cur=(typeof tutorialStepIndex!=='undefined')?tutorialStepIndex:0;
     const next=starts.filter(s=>s>cur)[0];
-    if(next!=null && typeof goToTutorialStep==='function'){ if(PX.shoot&&PX.shoot.cancel) PX.shoot.cancel(); if(PX.tap&&PX.tap.disarm) PX.tap.disarm(); goToTutorialStep(next); }
+    if(next!=null && typeof goToTutorialStep==='function'){ PX.primeForLesson(next); goToTutorialStep(next); }
     else PX.flash('That’s the last lesson so far','',2000);
   };
 
