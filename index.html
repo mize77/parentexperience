@@ -10880,11 +10880,14 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   PX.setupWhiteHalf = async function(){
     stopFollow();
     const blues=blueFields(), whites=whiteFields();
-    let carrier=(typeof ballCarrier!=='undefined'&&ballCarrier&&ballCarrier.dataset.team==='blue')?ballCarrier:blues[0];
-    const others=blues.filter(b=>b!==carrier);
+    // The blue CENTER (hole set) is always #7 (label B6) so the rebound that drops to
+    // Blue #7 lands on the player the parent sees at the centre.
+    const centerBlue=blueCenter()||blues[5];
+    const perim=blues.filter(b=>b!==centerBlue);
+    let carrier=(typeof ballCarrier!=='undefined'&&ballCarrier&&ballCarrier.dataset.team==='blue'&&ballCarrier!==centerBlue)?ballCarrier:perim[0];
+    const others=perim.filter(b=>b!==carrier);
     const perimeter=[{zone:'z4',b:carrier}];
     ['z1','z2','z3','z5'].forEach((z,i)=>{ if(others[i]) perimeter.push({zone:z, b:others[i]}); });
-    const centerBlue=others[4];
     const anims=[], usedWhite=[];
     perimeter.forEach(function(pa, idx){
       const c=zoneCentroidRight(pa.zone);
@@ -11273,13 +11276,24 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   function centerDefSpot(atkPos, goal, ballPt, hasBall){
     const ax=atkPos.x, ay=atkPos.y;
     let dx=goal.x-ax, dy=goal.y-ay; const dl=Math.hypot(dx,dy)||1; dx/=dl; dy/=dl;   // attacker -> goal
-    const spot={ x:ax+dx*0.55, y:ay+dy*0.55 };                                        // hug 0.55 m behind
+    const spot={ x:ax+dx*0.75, y:ay+dy*0.75 };                                        // hug close but clearly BEHIND (head a bit back of the center's head)
     const bp=ballPt||{x:MID_X,y:CY};
     return { x:spot.x, y:spot.y, rot:faceTo(spot.x,spot.y, bp.x,bp.y), pose: hasBall?'v':'h' };
   }
   // Register / drive the live center duel. The ticker keeps the defender marking the
   // (possibly moving) center forward, both facing the ball, switching h<->v as the
   // center gains/loses the ball. Runs during all offense/defense setups.
+  // The DEFENDING team renders in a higher layer than the attacking team, so when
+  // two players overlap (e.g. the center pair) the arm/head on top belongs to the
+  // defender — more realistic. Re-run whenever possession changes. (Ball stays on top.)
+  PX.updateTeamLayering = function(){
+    const carrierTeam=(typeof ballCarrier!=='undefined' && ballCarrier && ballCarrier.dataset && ballCarrier.dataset.team!=='goalie') ? ballCarrier.dataset.team : null;
+    qa('.player').forEach(function(p){
+      if(p.dataset.team==='goalie'){ return; }
+      if(!carrierTeam){ p.style.zIndex=''; return; }
+      p.style.zIndex = (p.dataset.team===carrierTeam) ? '5' : '6';   // defenders (6) above attackers (5); the ball (7) stays above both
+    });
+  };
   PX._duel = null;
   PX.setCenterDuel = function(atk, def, goal){ PX._duel = (atk&&def&&goal) ? { atk:atk, def:def, goal:{x:goal.x,y:goal.y} } : null; };
   PX.centerDuel = function(on){
@@ -11297,6 +11311,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       def.dataset.x=cx+(s.x-cx)*0.3; def.dataset.y=cy+(s.y-cy)*0.3;               // ease into the hug (marks a swimming center)
       def.dataset.pose=s.pose; def.dataset.rot=faceTo(+def.dataset.x,+def.dataset.y, bp.x,bp.y);
       if(typeof place==='function'){ place(atk); place(def); }
+      PX.updateTeamLayering();   // keep the defending team on top as possession shifts
     }catch(e){} }, 140);
   };
   // Put the shooter at a clear angle to the goal so a near corner is genuinely
@@ -11417,6 +11432,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     makePlayer(['BG','goalie', BLUE_GOAL.x+0.6, CY, 'v', faceTo(BLUE_GOAL.x+0.6,CY, ballPt.x,ballPt.y)]);
     makePlayer(['WG','goalie', WHITE_GOAL.x-4, CY, 'h', 270]);
     if(typeof moveBallTo==='function') moveBallTo(whites[3], 'right');
+    PX.updateTeamLayering();   // defending (blue) team on top
     PX.setCenterDuel(w6, b6, BLUE_GOAL); PX.centerDuel(true);
   };
 
@@ -11935,8 +11951,11 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
 
     // 3.3 (Step 49) YOU TRY — tap SHOOT: the keeper blocks it, the ball drops to Blue's center
     function resolveShot1(){ if(PX._l3s1) return; PX._l3s1='running';
-      l3Center = blueByCap(7) || blueFields()[0];
-      animateBlockedShot(l3Center).then(()=>{ PX.flash('Blocked! The rebound drops to Blue','save'); setTimeout(()=>{ PX._l3s1=true; }, 1500); });
+      l3Center = blueByCap(7) || blueCenter() || blueFields()[0];
+      animateBlockedShot(l3Center).then(()=>{
+        // Make sure Blue #7 clearly ENDS in possession, ball in his LEFT hand.
+        if(l3Center){ if(typeof ballCarrier!=='undefined') ballCarrier=l3Center; if(typeof moveBallTo==='function') moveBallTo(l3Center,'left'); if(typeof place==='function') place(l3Center); }
+        PX.flash('Blocked! The rebound drops to Blue','save'); setTimeout(()=>{ PX._l3s1=true; }, 1500); });
     }
     steps.push({
       instruction:'Time is running out — tap the SHOOT button to release the shot.',
@@ -12108,13 +12127,16 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     // a new 28. (Exception: a player already ahead of the ball keeps breaking away.)
     steps.push(animatedWatch('The ball turns over to White. The player closest to the ball must swim to it, take possession and continue the play — which starts the shot clock again at a new 28 seconds. (If a player were already ahead of the ball, breaking toward the other goal, he would carry on instead of turning back for it.)',
       function(){ PX.followBall(true);
+        // Possession flips to White — end the old (Blue-attacking) center duel so it
+        // can't drag White #7 back behind the blue center after he takes the ball.
+        PX.centerDuel(false); PX.setCenterDuel(null,null,null);
         return (async function(){
           const bx=(typeof ball!=='undefined'&&ball)?+ball.dataset.x:MID_X, by=(typeof ball!=='undefined'&&ball)?+ball.dataset.y:CY;
           // White #7 swims to the ball, takes possession, and carries it one metre
           // forward toward the attacking goal — no pass in this animation.
           const w=whiteByCap(7) || whiteFields().sort((a,b)=>Math.hypot(+a.dataset.x-bx,+a.dataset.y-by)-Math.hypot(+b.dataset.x-bx,+b.dataset.y-by))[0] || whiteFields()[0];
           if(w){ await swimSettle(w, {x:bx,y:by}, 900, faceTo(bx,by, BLUE_GOAL.x,BLUE_GOAL.y), 'v');   // swim to the ball, settle vertical
-            if(typeof ballCarrier!=='undefined') ballCarrier=w;
+            if(typeof ballCarrier!=='undefined') ballCarrier=w; PX.updateTeamLayering();   // White now attacks -> Blue defends on top
             const opp=nearestBlue(w); const hand=(opp && (+opp.dataset.y) < (+w.dataset.y)) ? 'right' : 'left';   // ball on the arm away from the opponent
             if(typeof moveBallTo==='function') moveBallTo(w, hand);
             await swim(w, { x:(+w.dataset.x)-1.0, y:+w.dataset.y }, 700);   // carry it one metre forward (no pass)
@@ -12169,8 +12191,9 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   function injectBannerCss(){
     if(document.getElementById('pxBannerCss')) return;
     const s=document.createElement('style'); s.id='pxBannerCss';
-    s.textContent = 'body.pxParentMode #tutorialBanner{ left:50% !important; top:12px !important; right:auto !important; bottom:auto !important; transform:translateX(-50%) !important; transition:opacity .5s ease !important; }'
-      // On touch/phone the banner sits in the TOP-LEFT corner so it never covers the action.
+    // The instruction box sits in the TOP-LEFT corner on EVERY device (mouse or touch)
+    // so it never covers the centered shot clock at the top.
+    s.textContent = 'body.pxParentMode #tutorialBanner{ left:12px !important; top:12px !important; right:auto !important; bottom:auto !important; transform:none !important; transition:opacity .5s ease !important; max-width:min(46vw,420px) !important; }'
       + ' body.pxParentMode.pxTouch #tutorialBanner{ left:8px !important; top:8px !important; right:auto !important; transform:none !important; max-width:min(64vw,340px) !important; }'
       + ' body.pxParentMode #tutorialExitBtn{ display:none !important; }'   // WP tutorial uses its own bottom-left nav, never the coach exit
       + ' body.pxParentMode .rotateHandle{ display:none !important; pointer-events:none !important; }'   // parents never rotate/spin players
