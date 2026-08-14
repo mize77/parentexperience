@@ -10402,7 +10402,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   // step's "Tap the marked spot") can never bleed into the next step.
   PX.clearFlash = function(){ PX._flashQueue.length=0; PX._flashBusy=false; const l=document.getElementById('pxFlash'); if(l){ l.style.opacity='0'; } const bn=document.getElementById('tutorialBanner'); if(bn){ clearTimeout(PX._bannerT); PX._bannerT=setTimeout(()=>{ bn.style.opacity='1'; }, 400); } };
   function _processFlash(){
-    if(!PX._flashQueue.length){ PX._flashBusy=false; const bn=document.getElementById('tutorialBanner'); if(bn){ clearTimeout(PX._bannerT); PX._bannerT=setTimeout(()=>{ bn.style.opacity='1'; }, 500); } return; }
+    if(!PX._flashQueue.length){ PX._flashBusy=false; if(!PX._holdBox){ const bn=document.getElementById('tutorialBanner'); if(bn){ clearTimeout(PX._bannerT); PX._bannerT=setTimeout(()=>{ bn.style.opacity='1'; }, 500); } } return; }   // _holdBox keeps the instruction box hidden through an animatedWatch animation
     PX._flashBusy=true;
     const item=PX._flashQueue.shift();
     let l=document.getElementById('pxFlash');
@@ -10958,8 +10958,16 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   // the confirmation is given). runFn may return a promise.
   function animatedWatch(instruction, runFn){
     let done=false;
+    // Keep the instruction box HIDDEN while the animation plays, then reveal it —
+    // so the parent watches the action first and reads the box after (one thing at
+    // a time). If the animation ends with a headline flash, the flash system reveals
+    // the box once the headline clears (see _holdBox in _processFlash).
+    function finish(){ done=true; PX._holdBox=false;
+      if(!PX._flashBusy){ const bn=document.getElementById('tutorialBanner'); if(bn){ clearTimeout(PX._bannerT); PX._bannerT=setTimeout(()=>{ bn.style.opacity='1'; }, 60); } } }
     return { instruction, bannerSide:'top', skipDimPhase:true, highlight:null, requiresAcknowledge:true,
-      onEnter:function(){ done=false; let r=null; try{ r=runFn&&runFn(); }catch(e){} if(r&&typeof r.then==='function') r.then(()=>{ done=true; }); else done=true; },
+      onEnter:function(){ done=false; PX._holdBox=true;
+        const bn=document.getElementById('tutorialBanner'); if(bn){ clearTimeout(PX._bannerT); bn.style.opacity='0'; }   // hide until the animation is done
+        let r=null; try{ r=runFn&&runFn(); }catch(e){} if(r&&typeof r.then==='function') r.then(finish); else finish(); },
       validate:{ type:'custom', fn:()=> done===true && tutorialManualAck } };
   }
   // Read first, THEN act: shows the instruction and waits for "Got it"; only
@@ -11032,7 +11040,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       ()=>{ PX.field.setPhase('lines'); PX.blinkLines('ejection'); }));
 
     // 1.6 Substitutes swim out — leaving seven starters per team (needs Got it)
-    steps.push(animatedWatch('Only seven players per team are in the water at once: six field players and one goalkeeper. The other six are substitutes, including a backup goalkeeper (cap 13). Teams usually have six substitutes, but some competitions allow more.',
+    steps.push(animatedWatch('Only seven players per team are in the water at once: six field players and one goalkeeper. The other six are substitutes. Teams usually have six substitutes, but some competitions allow more.',
       function(){ PX.stopLineBlink(); return Promise.all([ PX.swimSubsOut('white'), PX.swimSubsOut('blue') ]); }));
 
     // 1.7 The seven starters line up at their ends (needs Got it)
@@ -11254,11 +11262,12 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     const others=w.filter(p=>p!==carrier);
     const seq=[others[0], others[1], carrier].filter(Boolean);
     for(const t of seq){
-      await passBallTo(t, 550);
-      // the receiver holds the ball ~1s, easing slightly back (away from the goal = +x)
+      await passBallTo(t, 550);   // caught in the RIGHT (dominant) hand
+      // the receiver protects the ball, moving ~1m back (away from the goal = +x),
+      // holding it in the same right hand — no handing it over to the other hand.
       const cx=+t.dataset.x, cy=+t.dataset.y;
-      await swim(t, { x:cx+0.6, y:cy }, 900);
-      if(typeof moveBallTo==='function') moveBallTo(t, ballHand);
+      await swim(t, { x:cx+1.0, y:cy }, 900);
+      if(typeof moveBallTo==='function') moveBallTo(t, 'right');
       await delay(150);
     }
   }
@@ -11592,30 +11601,36 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       atk.dataset.pose='v'; atk.dataset.rot=faceTo(+atk.dataset.x,+atk.dataset.y, BLUE_GOAL.x,BLUE_GOAL.y); if(typeof place==='function') place(atk);
       if(typeof moveBallTo==='function') moveBallTo(atk,'left');
       if(def){ def.dataset.pose='v';
-        await swim(def, { x:(+atk.dataset.x)+0.6, y:(+atk.dataset.y)+0.14 }, 950);   // defender comes in hard on the carrier and STAYS
+        await swim(def, { x:(+atk.dataset.x)-0.62, y:(+atk.dataset.y)+0.12 }, 950);   // attack from the FRONT (goal side) — the defender is already goal-side, so it presses forward and never swims THROUGH to the back
         def.dataset.rot=faceTo(+def.dataset.x,+def.dataset.y, +atk.dataset.x,+atk.dataset.y); if(typeof place==='function') place(def); }
       spotlightCircle(+atk.dataset.x, +atk.dataset.y, 2.4, false);   // NO whistle — this is allowed
       await delay(1000);
     })();
   }
-  // 4.4 — the flip side: once the carrier LETS GO of the ball, continuing to dunk
-  // him (now a free player) is a foul.
-  function dunkAfterReleaseDemo(){
+  // 4.3 — the MOST COMMON ordinary foul: the ball-carrier, attacked from the front,
+  // shields the ball (side-on, ball hand AWAY from the defender) and releases it a
+  // short distance to a safe spot; the referee whistles a foul (a free throw for the
+  // attacking team). Happens several times in a normal attack.
+  function drawnFoulDemo(){
     return (async function(){
       stopFollow(); clearL4Overlays(); clearHoldCinematic();
       const atk=PX._foulAtk||currentWhiteShooter(); if(!atk) return;
       const def=PX._foulDef||nearestBlue(atk);
       if(typeof ballCarrier!=='undefined') ballCarrier=atk;
-      atk.dataset.pose='v'; atk.dataset.rot=faceTo(+atk.dataset.x,+atk.dataset.y, (def?+def.dataset.x:0),(def?+def.dataset.y:0)); if(typeof place==='function') place(atk);
-      if(typeof moveBallTo==='function') moveBallTo(atk,'right');   // ball on the contested side
-      if(def){ def.dataset.pose='v'; def.dataset.x=(+atk.dataset.x)-0.85; def.dataset.y=+atk.dataset.y; def.dataset.rot=faceTo(+def.dataset.x,+def.dataset.y, +atk.dataset.x,+atk.dataset.y); if(typeof place==='function') place(def); }
-      await delay(750);
-      // the attacker RELEASES the ball (it comes off the hand, away from goal)
+      // White shields: side-on (right arm toward +x), ball in the RIGHT hand — away
+      // from the goal-side defender.
+      atk.dataset.pose='v'; atk.dataset.rot=0; if(typeof place==='function') place(atk);
+      if(typeof moveBallTo==='function') moveBallTo(atk,'right');
+      await delay(450);
+      // Blue attacks from the FRONT (goal side = -x), pressing the non-ball side.
+      if(def){ def.dataset.pose='v';
+        await swim(def, { x:(+atk.dataset.x)-0.85, y:+atk.dataset.y }, 950);
+        def.dataset.rot=faceTo(+def.dataset.x,+def.dataset.y, +atk.dataset.x,+atk.dataset.y); if(typeof place==='function') place(def); }
+      await delay(350);
+      // White releases the ball ~0.5 m to the OPPOSITE (safe) side, away from the defender.
       if(typeof ballCarrier!=='undefined') ballCarrier=null;
-      await moveBallXY((+atk.dataset.x)+1.4, (+atk.dataset.y)-0.7, 500);
-      await delay(200);
-      // the defender keeps dunking the now-free attacker -> FOUL
-      if(def){ await swim(def, { x:(+atk.dataset.x)-0.35, y:+atk.dataset.y }, 480); }
+      await moveBallXY((+atk.dataset.x)+0.9, +atk.dataset.y, 420);
+      // the referee whistles an ordinary foul -> free throw for the attacking team.
       spotlightCircle(+atk.dataset.x, +atk.dataset.y, 2.2, false);
       if(typeof PX.whistle==='function'){ try{ PX.whistle(); }catch(e){} }
       await delay(800);
@@ -11786,15 +11801,16 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     // Area-overlap fraction of two equal circles (radius R) whose centers are d apart.
     function coverFrac(d){ if(d<=0) return 1; if(d>=TWO_R) return 0; const x=d/TWO_R; return (2/Math.PI)*(Math.acos(x) - x*Math.sqrt(1-x*x)); }
     function finish(){ if(done) return; done=true; dragging=false;
-      ball.style.transition='left .18s ease, top .18s ease'; ball.style.left=ghostCx+'px'; ball.style.top=ghostCy+'px';
-      cleanup(); setTimeout(()=>{ PX.hideGoalZoom(); if(onDone) onDone(); }, 220); }
-    // Confirm the MOMENT the whole ball is in the cage (fully across the line)
-    // AND it covers the ghost by at least 90% — no need to lift the finger.
+      cleanup(); setTimeout(()=>{ PX.hideGoalZoom(); if(onDone) onDone(); }, 200); }   // leave the ball where the parent dropped it — anywhere inside the net counts
+    // Confirm the MOMENT the WHOLE ball sits inside the net — anywhere between the
+    // posts, fully across the line and not pushed out the back. The ghost is only an
+    // orientation hint, not a target the ball has to land on.
     function tryComplete(){ if(done) return false;
       const bx=parseFloat(ball.style.left), by=parseFloat(ball.style.top);
-      const fullyCrossed = (bx + R) <= (lineXpx - 1);                 // whole ball past the line, inside the goal
-      const d=Math.hypot(bx-ghostCx, by-ghostCy);
-      if(fullyCrossed && coverFrac(d) >= 0.90){ finish(); return true; }
+      const fullyInNet = (bx + R) <= (lineXpx - 1)              // the whole ball is past the goal line, inside the net
+                      && (bx - R) >= 2                          // not pushed out the back of the net
+                      && (by - R) >= 2 && (by + R) <= (D - 2);  // within the net, top to bottom
+      if(fullyInNet){ finish(); return true; }
       return false; }
     function down(e){ if(done) return; e.preventDefault(); e.stopPropagation(); dragging=true; try{ ball.setPointerCapture(e.pointerId); }catch(_){} }
     function move(e){ if(!dragging) return; const q=local(e); const x=Math.max(10,Math.min(D-10,q.x)), y=Math.max(10,Math.min(D-10,q.y)); ball.style.left=x+'px'; ball.style.top=y+'px'; tryComplete(); }
@@ -11959,7 +11975,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     // part of the real field, so we magnify the spot and let the parent push the
     // ball across the line onto the ghost inside the circle).
     steps.push({
-      instruction:'A goal counts only when the WHOLE ball crosses the goal line, between the posts and under the crossbar. This is a close-up of the goal line — drag the ball across it, into the goal, onto the ghost.',
+      instruction:'A goal counts only when the WHOLE ball crosses the goal line, between the posts and under the crossbar. This is a close-up of the goal line — drag the ball across it, fully into the net (the shadow just shows you roughly where).',
       bannerSide:'top', skipDimPhase:true, highlight:null,
       allowedSelectors:'#pxGoalZoom',   // the zoom widget stays interactive under the lock
       onEnter:function(){ PX._goalDragged=false; setShootingAngle(false);
@@ -11998,7 +12014,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       function(){ PX.exitFrontCourt(); return PX.setupWhiteHalf(); }));
 
     // 2.10 The game clock — periods, breaks between them, and time-outs
-    steps.push(watch('A Water Polo game is divided into four periods, also called quarters. Their length can differ depending on the competition, but a period is usually 8 minutes long — and for younger age groups it is sometimes shorter.',
+    steps.push(watch('A Water Polo game is divided into four periods, also called quarters. Their length can differ depending on the competition, but a period is usually 8 minutes long — for younger age groups it is sometimes shorter.',
       ()=>{ PX.flash('FOUR QUARTERS','',1800); }));
     steps.push(watch('The short breaks between periods are used for recovery and for tactical adjustments by the coaches. Between quarters the teams stay on the same half; only at the longer half-time break do the teams switch sides.'));
     steps.push(watch('While their team is in possession, a coach can call a time-out to make tactical adjustments or to substitute players. The number and length of time-outs can also differ between competitions.'));
@@ -12008,7 +12024,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       ()=>{ if(!document.getElementById('pxRefTop')) PX.showReferees(); PX.startRefTracking(); PX.updateReferees(); }));
 
     // 2.12 Lesson 2 wrap-up — LESSON 2 COMPLETE headline FIRST, then the bullet box (wider).
-    steps.push(watchLeadFlash('UNDERSTAND\n• Attack and defense: one team has the ball, the other defends and tries to win it.\n• Physical play is allowed, but fouls give the ball back or, when serious, send a player out.\n• A goal is scored when the whole ball crosses the line between the posts.\n• The game restarts and players can be substituted as play continues.\n• The clock and the referees keep the game fair and moving.',
+    steps.push(watchLeadFlash('UNDERSTAND\n• Attack and defense: one team has the ball, the other tries to gain possession of the ball.\n• Physical play is allowed — an earned foul keeps the offense in possession, and a serious foul can send a player out.\n• A goal is scored when the whole ball crosses the line between the posts.\n• The game restarts and players can be substituted as play continues.\n• The clock and the referees keep the game fair and moving.',
       'LESSON 2 COMPLETE', 'good', ()=>{ const bn=document.getElementById('tutorialBanner'); if(bn) bn.classList.add('pxWide'); }));
 
     return steps;
@@ -12090,10 +12106,12 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       const others=b.filter(p=>p!==carrier);
       const seq=[others[0], others[1], carrier].filter(Boolean);
       for(const t of seq){
-        await passBallTo(t, 550);
+        await passBallTo(t, 550);   // caught in the RIGHT (dominant) hand
+        // protect the ball: ~1m back (toward own goal = -x for Blue attacking right),
+        // held in the same right hand — no switching to the other hand.
         const cx=+t.dataset.x, cy=+t.dataset.y;
-        await swim(t, { x:cx-0.6, y:cy }, 800);   // ease slightly back (toward own goal = -x for Blue attacking right)
-        if(typeof moveBallTo==='function') moveBallTo(t, 'left');
+        await swim(t, { x:cx-1.0, y:cy }, 850);
+        if(typeof moveBallTo==='function') moveBallTo(t, 'right');
         await delay(150);
       }
     })();
@@ -12151,8 +12169,12 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
           if(typeof ballCarrier!=='undefined') ballCarrier=null;
           tween((x,y)=>{ ball.dataset.x=x; ball.dataset.y=y; if(typeof placeBall==='function') placeBall();
             gkTrackBall(wg, {x:x, y:y});   // edge along the line, never outside the posts
-          }, from, to, 600, ()=>{ if(typeof moveBallTo==='function') moveBallTo(t,'left'); res(); });
+          }, from, to, 600, ()=>{ if(typeof moveBallTo==='function') moveBallTo(t,'right'); res(); });   // caught in the right hand
         });
+        // protect the ball: ~1m back (toward own goal = -x), held in the same right hand
+        await swim(t, { x:(+t.dataset.x)-1.0, y:+t.dataset.y }, 500);
+        if(typeof moveBallTo==='function') moveBallTo(t,'right');
+        gkTrackBall(wg, {x:+ball.dataset.x, y:+ball.dataset.y});
         await delay(140);
       }
     })();
@@ -12315,14 +12337,20 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       instruction:'Now White attacks the other goal. White #2 (with the ball) is about to pass to White #3 — both circled in red. Drag Blue #3 onto the ghost in the passing line to cut it out.',
       bannerSide:'top', skipDimPhase:true, highlight:null,
       allowedSelectors:function(){ return intDef ? ['.player[data-label="'+intDef.dataset.label+'"]', '#directionPad'] : ['#directionPad']; },
-      onEnter:function(){ PX.enterFrontCourt(); PX.followBall(true); PX.showShotClock(28);
+      onEnter:function(){ PX.enterFrontCourt(); PX.followBall(true);
+        // Keep the instruction box hidden while the teams swim down; the shot clock
+        // runs 28 -> 18 during the swim, and the box only opens once they are set up.
+        const bn=document.getElementById('tutorialBanner'); if(bn){ clearTimeout(PX._bannerT); bn.style.opacity='0'; } PX._holdBox=true;
+        PX.showShotClock(28); PX.tickShotClock(28, 18, 450);   // count down while they swim to the blue goal
+        const revealBox=function(){ PX._holdBox=false; if(bn){ clearTimeout(PX._bannerT); PX._bannerT=setTimeout(()=>{ bn.style.opacity='1'; }, 60); } };
         swimToInterceptSetup().then(function(o){
-          const carrier=o.carrier, receiver=o.receiver, def=o.def; if(!carrier||!receiver||!def) return;
+          const carrier=o.carrier, receiver=o.receiver, def=o.def; if(!carrier||!receiver||!def){ revealBox(); return; }
           intPasser=carrier; intDef=def;
           const p2={ x:+carrier.dataset.x, y:+carrier.dataset.y }, p3={ x:+receiver.dataset.x, y:+receiver.dataset.y };
           intTarget={ x:(p2.x+p3.x)/2, y:(p2.y+p3.y)/2 };   // a point on the #2 -> #3 passing line
           PX.followGoal('blue');   // anchor the blue goal in view during the drag (no ball-chasing)
           PX.centerDuel(false); PX.updateTeamLayering();   // STOP the 140ms duel/layering ticker so it can't interfere with the drag
+          PX.showShotClock(18);   // park the clock at 18 as the box appears (it has run down during the swim)
           PX.clearSelections(); if(typeof setSelected==='function') setSelected(def, true);
           spotlightBetween(p2.x,p2.y,p3.x,p3.y,false);   // ONE red circle enclosing White #2 (ball) and White #3
           step53.ghost={ type:'playerPosition', targetPlayer:{ team:def.dataset.team, pose:def.dataset.pose, rot:+def.dataset.rot||0, x:intTarget.x, y:intTarget.y, label:def.dataset.label } };
@@ -12330,6 +12358,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
           // is only known AFTER the swim, so render it explicitly now (that is why it
           // was invisible before).
           if(typeof renderTutorialGhost==='function') renderTutorialGhost(step53.ghost);
+          revealBox();   // now show the interception instruction
         });
       },
       validate:{ type:'custom', fn:function(){ if(!intDef||!intTarget) return false; return Math.hypot((+intDef.dataset.x)-intTarget.x, (+intDef.dataset.y)-intTarget.y) <= 1.6; } },
@@ -12359,9 +12388,9 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
           return (async function(){
             const b=blueFields(); const seq=[]; for(let i=0;i<6;i++) seq.push(b[i%(b.length||1)]);
             for(const t of seq){ if(!t) continue;
-              await passBallTo(t, 480);
-              await swim(t, { x:(+t.dataset.x)-0.7, y:+t.dataset.y }, 420);   // ease back to secure the position
-              if(typeof moveBallTo==='function') moveBallTo(t,'left');
+              await passBallTo(t, 480);   // caught in the RIGHT (dominant) hand
+              await swim(t, { x:(+t.dataset.x)-1.0, y:+t.dataset.y }, 480);   // ~1m back to protect the ball, still right hand
+              if(typeof moveBallTo==='function') moveBallTo(t,'right');
               await delay(110);
             }
             PX.setShotClock(3);   // hold at 3 — the last seconds run out in step 56
@@ -12399,9 +12428,13 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
         })();
       }));
 
+    // 3.7c — what "possession" means for the shot clock: individual vs TEAM possession.
+    steps.push(watch('One last point — it comes down to what “possession” really means. When a player lets go of the ball he is no longer holding it, but his TEAM keeps possession until the other team CLEARLY wins the ball: getting a firm, safe hold of it, or being awarded a free throw. So while the ball is loose and both teams fight for it, the shot clock keeps running for the team that last had it. Only once possession has clearly changed does it reset to a fresh 28 seconds for the other team.',
+      ()=>{ PX.followGoal('white'); PX.showShotClock(28); const bn=document.getElementById('tutorialBanner'); if(bn) bn.classList.add('pxWide'); }));
+
     // 3.8 (Step 58) Lesson 3 wrap-up — LESSON 3 COMPLETE headline FIRST, then a short
     // recap in a WIDER box so it fits in fewer lines on a phone.
-    steps.push(watchLeadFlash('UNDERSTAND\n• A shot clock limits each possession to 28 seconds.\n• It runs while the ball is live; it pauses for fouls and after goals.\n• An offensive rebound resets it to 18 seconds.\n• If the shot clock runs out before a shot, possession changes teams.\n• The closest player then takes the ball to start the new possession.',
+    steps.push(watchLeadFlash('UNDERSTAND\n• A shot clock limits each possession to 28 seconds.\n• It runs while the ball is live; it pauses for fouls and after goals.\n• An offensive rebound resets it to 18 seconds.\n• A team keeps possession — and the clock keeps running — until the other team clearly wins the ball.\n• If the shot clock runs out before a shot, possession changes teams.',
       'LESSON 3 COMPLETE', 'good', ()=>{ PX.followBall(false); PX.hideShotClock(); const bn=document.getElementById('tutorialBanner'); if(bn) bn.classList.add('pxWide'); }));
 
     return steps;
@@ -12432,13 +12465,14 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     steps.push(animatedWatch('First, the key idea behind fouls: a player who is HOLDING the ball may be grabbed, held, even pushed under — and that is NOT a foul. Going hard for the ball, and for the player holding it, is completely allowed. (Only genuinely violent play would be punished.)',
       function(){ return possessionOkDemo().then(()=>{ PX._leadFlash('THIS IS NOT A FOUL','good'); }); }));
 
-    // 4.3 — ordinary foul #1: ball-under.
-    steps.push(animatedWatch('An ordinary foul, then, is a smaller, technical infringement. The most common is the BALL-UNDER: a player taking the ball under the surface while being challenged for it. The player touching the ball commits it — free throw to the other team.',
-      function(){ return ballUnderDemo().then(()=>{ if(typeof PX.whistle==='function'){ try{ PX.whistle(); }catch(e){} } }); }));
+    // 4.3 — ordinary foul #1 (the MOST COMMON): a defender fouls the shielding
+    // ball-carrier as he releases the ball to a safe spot — a free throw.
+    steps.push(animatedWatch('An ordinary foul is a smaller, technical infringement. The most common one happens again and again in an attack: the ball-carrier is attacked, shields the ball with his body and releases it a short distance to a safe spot — and the referee whistles a foul, a free throw for his team.',
+      function(){ return drawnFoulDemo().then(()=>{ PX._leadFlash('ORDINARY FOUL',''); }); }));
 
-    // 4.4 — ordinary foul #2: dunking a player who has RELEASED the ball.
-    steps.push(animatedWatch('Now the flip side of that first idea: the defender attacks the ball and the White player LETS GO of it. From that moment White no longer has the ball — so continuing to push or dunk him under is a foul.',
-      function(){ return dunkAfterReleaseDemo(); }));
+    // 4.4 — ordinary foul #2: ball-under.
+    steps.push(animatedWatch('Another common ordinary foul is the BALL-UNDER: a player taking the ball under the surface while being challenged for it. The player touching the ball as it goes under commits it — a free throw to the other team.',
+      function(){ return ballUnderDemo().then(()=>{ if(typeof PX.whistle==='function'){ try{ PX.whistle(); }catch(e){} } }); }));
 
     // 4.5 — ordinary foul #3: 2-metre offside.
     steps.push(animatedWatch('The third is OFFSIDE at the 2-metre line — the red box in front of the goal. An attacker WITHOUT the ball may not slip into that box ahead of the ball (the yellow line marks where the ball is). How far he can go depends on where the ball is; going in ahead of it is a foul.',
@@ -12453,7 +12487,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       function(){ return advantageDemo().then(()=>{ PX._leadFlash('ADVANTAGE — PLAY ON',''); }); }));
 
     // 4.8 — wrap-up: LESSON 4 COMPLETE headline FIRST, then the recap box (wider).
-    steps.push(watchLeadFlash('UNDERSTAND\n• Attacking the ball, and the player holding it, is allowed — that is not a foul.\n• Ordinary fouls are smaller, technical infringements: ball-under, dunking a player who has let go of the ball, and 2-metre offside.\n• An ordinary foul gives the other team a free throw, and nobody leaves the pool.\n• A free throw can be tossed up, passed, or — from outside 6 m — shot straight at goal.\n• The referee can wave play on when whistling would only take away a clear chance (advantage).',
+    steps.push(watchLeadFlash('UNDERSTAND\n• Attacking the ball, and the player holding it, is allowed — that is not a foul.\n• Ordinary fouls are smaller, technical infringements: most often a defender fouling the ball-carrier as he shields and releases the ball, plus the ball-under and 2-metre offside.\n• An ordinary foul gives the other team a free throw, and nobody leaves the pool.\n• A free throw can be tossed up, passed, or — from outside 6 m — shot straight at goal.\n• The referee can wave play on when whistling would only take away a clear chance (advantage).',
       'LESSON 4 COMPLETE', 'good', ()=>{ if(PX.stopLineBlink) PX.stopLineBlink(); PX.followBall(false); const bn=document.getElementById('tutorialBanner'); if(bn) bn.classList.add('pxWide'); }));
 
     return steps;
@@ -12514,7 +12548,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       // Shot clock: parents see ONE clock, centered at the top of the screen, with no control buttons.
       + ' body.pxParentMode #shotClockLeft{ display:none !important; }'
       + ' body.pxParentMode .shotClockMiniControls{ display:none !important; }'
-      + ' body.pxParentMode #shotClockRight.shotClockViewportFixed{ left:50% !important; right:auto !important; transform:translateX(-50%) !important; }'
+      + ' body.pxParentMode #shotClockRight.shotClockViewportFixed{ left:75% !important; right:auto !important; transform:translateX(-50%) !important; }'
       // Make the parent shot clock about twice as large (more prominent).
       + ' body.pxParentMode #shotClockRight{ padding:12px 22px !important; border-radius:16px !important; }'
       + ' body.pxParentMode #shotClockRight .shotClockNumber{ font-size:52px !important; }'
@@ -12633,6 +12667,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     try{ setShootingAngle(false); }catch(e){}
     try{ PX.clearSelections(); }catch(e){}
     try{ qa('[data-px="goaltap"]').forEach(e=>e.remove()); }catch(e){}
+    try{ PX._holdBox=false; }catch(e){}   // never leave the instruction box suppressed after a jump
     try{ if(PX.clearFlash) PX.clearFlash(); }catch(e){}
   };
   // Escape hatch — the current step is never a dead end: advance one step so the
@@ -12674,7 +12709,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     try{ if(PX.clearSelections) PX.clearSelections(); }catch(e){}
     if(PX.shoot&&PX.shoot.cancel){ try{ PX.shoot.cancel(); }catch(e){} }
     if(PX.tap&&PX.tap.disarm){ try{ PX.tap.disarm(); }catch(e){} }
-    PX._zonesActive=false;
+    PX._zonesActive=false; PX._holdBox=false;   // clear any suppressed-box state from a mid-animation jump
     // Lessons 2 & 3 both open from the offense/defense board on the field — build it
     // fresh so the players are correctly set up (a stale 12-player board would have
     // made ensureOffenseBoard's guard no-op and left them where the last step left them).
@@ -12790,7 +12825,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     PX._animGen = (PX._animGen||0) + 1;   // cancel anything still animating from a prior run
     try{ stopFollow(); }catch(e){}
     PX._viewBias=0;
-    PX._swimDone=false; PX._setupDone=false; PX._gkTapped=false; PX._zonesActive=false; PX._snapshots={};
+    PX._swimDone=false; PX._setupDone=false; PX._gkTapped=false; PX._zonesActive=false; PX._holdBox=false; PX._snapshots={};
     PX.hideShotClock(); PX.followBall(false); PX.centerDuel(false); PX.setCenterDuel(null,null,null);
     const l1=PX.buildLesson1Steps(), l2=PX.buildLesson2Steps(), l3=PX.buildLesson3Steps(), l4=PX.buildLesson4Steps();
     PX._lessonStarts=[0, l1.length, l1.length+l2.length, l1.length+l2.length+l3.length];   // Lesson 2 / 3 / 4 start offsets
