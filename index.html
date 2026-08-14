@@ -11766,7 +11766,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   }
 
   // A circular MAGNIFIER of the ball-under situation: a Water Polo ball floating half
-  // above / half under the surface, White #5's palm shaping over its top, then Blue #2's
+  // above / half under the surface, White #5's palm shaping over its top, then Blue #5's
   // hand pressing down on White's hand and the ball going fully under. Illustration only.
   PX.hideBallUnderZoom = function(){ const w=document.getElementById('pxBallUnderZoom'); if(w) w.remove(); };
   PX.showBallUnderZoom = function(){
@@ -11802,7 +11802,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
         wrap.appendChild(h); return h;
       }
       const wHand=hand('pxBUW', '#eef2f6');   // White #5's hand (in direct contact on the ball)
-      const bHand=hand('pxBUB', '#2f5fa8');   // Blue #2's hand (presses on top of White's hand)
+      const bHand=hand('pxBUB', '#2f5fa8');   // Blue #5's hand (presses on top of White's hand)
       const ballTop = surf - (bs/D*100)*0.5;  // top of the ball, in %
       document.body.appendChild(wrap);
       function reset(){ ball.style.transition='none'; bHand.style.transition='none';
@@ -11894,7 +11894,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       function(){ return ballUnderDemo(); }));
     // 2A.6b MAGNIFIER — the key (and confusing!) detail: the player in DIRECT CONTACT
     // commits the ball-under, even when the opponent is the one pressing down.
-    steps.push(animatedWatch('Up close: White #5 has his palm directly on the ball. Blue #2 then presses down on White’s hand and the ball goes under — but this is a ball-under committed by WHITE, even though Blue is actively pushing down. The player in direct contact with the ball is the one committing the ball-under!',
+    steps.push(animatedWatch('Up close: White #5 has his palm directly on the ball. Blue #5 then presses down on White’s hand and the ball goes under — but this is a ball-under committed by WHITE, even though Blue is actively pushing down. The player in direct contact with the ball is the one committing the ball-under!',
       function(){ return PX.showBallUnderZoom(); }));
     steps.push(watch('… taking the ball under while holding it is an ordinary foul, and possession would change to the other team.',
       ()=>{ PX.hideBallUnderZoom(); }));
@@ -12157,11 +12157,13 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
 
     // 3.3 (Step 49) YOU TRY — tap SHOOT: the keeper blocks it, the ball drops to Blue's center
     function resolveShot1(){ if(PX._l3s1) return; PX._l3s1='running';
+      if(PX._clockTimer){ clearInterval(PX._clockTimer); PX._clockTimer=null; }   // freeze the countdown the instant SHOOT is pressed — it must not keep ticking down through the block
       l3Center = blueByCap(7) || blueCenter() || blueFields()[0];
       animateBlockedShot(l3Center).then(()=>{
         // Make sure Blue #7 clearly ENDS in possession, ball in his LEFT hand.
         if(l3Center){ if(typeof ballCarrier!=='undefined') ballCarrier=l3Center; if(typeof moveBallTo==='function') moveBallTo(l3Center,'left'); if(typeof place==='function') place(l3Center); }
-        PX.flash('Blocked! The rebound drops to Blue','save'); setTimeout(()=>{ PX._l3s1=true; }, 1500); });
+        PX.showShotClock(18);   // Blue keeps possession -> reset immediately to the new 18 and HOLD (no further run-down)
+        PX.flash('Blocked! The rebound drops to Blue — shot clock reset to 18','save'); setTimeout(()=>{ PX._l3s1=true; }, 1500); });
     }
     steps.push({
       instruction:'Time is running out — tap the SHOOT button to release the shot.',
@@ -12333,7 +12335,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     steps.push(ackThenAnimate('This time the Blue team can’t find an opening to finish with a shot. Watch the shot clock — the last three seconds are about to run out.',
       function(){ PX.followGoal('white'); PX.setShotClock(3); PX.tickShotClock(3, 0, 1000);
         return delay(3300).then(()=>{ PX.flash('SHOT CLOCK EXPIRED','whistle',1500);
-          return delay(1100).then(()=>{ if(typeof PX.whistle==='function'){ try{ PX.whistle(); }catch(e){} } PX.flash('WHISTLE','whistle',1300); }); }); }));
+          return delay(1100).then(()=>{ if(typeof PX.whistle==='function'){ try{ PX.whistle(); }catch(e){} } }); }); }));   // PX.whistle() already shows one WHISTLE headline — no second flash
 
     // 3.7b (Step 57) Turnover + the rule, combined. The nearest White player MUST swim
     // to the ball, take possession and continue the play — which restarts the clock at
@@ -12360,7 +12362,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
 
     // 3.8 (Step 58) Lesson 3 wrap-up — LESSON 3 COMPLETE headline FIRST, then a short
     // recap in a WIDER box so it fits in fewer lines on a phone.
-    steps.push(watchLeadFlash('UNDERSTAND\n• A shot clock limits each possession to 28 seconds.\n• It runs while the ball is live; it pauses for fouls and after goals.\n• An offensive rebound resets it to 18 seconds.\n• A save, an interception or the clock expiring turns the ball over.\n• On a turnover the closest player takes the ball.',
+    steps.push(watchLeadFlash('UNDERSTAND\n• A shot clock limits each possession to 28 seconds.\n• It runs while the ball is live; it pauses for fouls and after goals.\n• An offensive rebound resets it to 18 seconds.\n• If the shot clock runs out before a shot, possession changes teams.\n• The closest player then takes the ball to start the new possession.',
       'LESSON 3 COMPLETE', 'good', ()=>{ PX.followBall(false); PX.hideShotClock(); const bn=document.getElementById('tutorialBanner'); if(bn) bn.classList.add('pxWide'); }));
 
     return steps;
