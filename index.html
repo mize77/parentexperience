@@ -11564,72 +11564,113 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   }
 
   /* ---------------------------------------------------------------- LESSON 4
-     ORDINARY FOULS — small, self-contained demos (the physicality + ball-under
-     rules themselves were taught in Lesson 2A; these only illustrate the NEW
-     beats: an ordinary foul + whistle, the free-throw restart, and advantage).
-     White attacks the LEFT (blue) goal, so "forward" = -x and "back" (toward
-     White's own goal) = +x. PX._foulAtk / PX._foulDef hold the pair reused
-     across the lesson's steps. */
+     ORDINARY FOULS. Correct rules: a player HOLDING the ball may be held, sunk
+     or pulled — that is legal (only genuinely violent play is punished). Ordinary
+     fouls are the minor, technical infringements: ball-under, dunking a player
+     who has LET GO of the ball, and 2-metre offside — each gives the other team
+     a free throw and nobody leaves the pool. White attacks the LEFT (blue) goal
+     (forward = -x). PX._foulAtk / PX._foulDef hold the pair reused across steps. */
   function pickFoulPair(){
     const z4=zoneCentroid('z4');
     const atk = whiteFields().sort((a,b)=>dist2(a,z4)-dist2(b,z4))[0] || whiteFields()[0];
     const def = atk ? nearestBlue(atk) : null;
     PX._foulAtk=atk; PX._foulDef=def;
+    PX._pressAtk=atk; PX._pressDef=def;   // keep the 2A ball-under demo pointing at THIS pair
     return { atk, def };
   }
-  // 4.2 — a defender pulls the ball-CARRIER back: because the player has the ball
-  // this is an ordinary foul (a single whistle, nobody leaves the pool).
-  function ordinaryFoulDemo(){
+  function clearL4Overlays(){ ['pxBallLine','pxFTArrow'].forEach(id=>{ const e=document.getElementById(id); if(e) e.remove(); }); try{ if(PX.stopLineBlink) PX.stopLineBlink(); }catch(e){} }
+  function moveBallXY(tx,ty,ms){ return new Promise(res=>{ if(typeof ball==='undefined'||!ball){ res(); return; } tween((x,y)=>{ ball.dataset.x=x; ball.dataset.y=y; if(typeof placeBall==='function') placeBall(); }, {x:+ball.dataset.x,y:+ball.dataset.y}, {x:tx,y:ty}, ms||500, res); }); }
+  function ballTossUp(up,ms){ return new Promise(res=>{ if(typeof ball==='undefined'||!ball){ res(); return; } const bx=+ball.dataset.x, by=+ball.dataset.y; tween((x,y)=>{ ball.dataset.x=x; ball.dataset.y=y; if(typeof placeBall==='function') placeBall(); }, {x:bx,y:by}, {x:bx,y:by-(up||1.3)}, ms||300, ()=>{ tween((x,y)=>{ ball.dataset.x=x; ball.dataset.y=y; if(typeof placeBall==='function') placeBall(); }, {x:bx,y:by-(up||1.3)}, {x:bx,y:by}, ms||300, res); }); }); }
+
+  // 4.2 — the possession principle: attacking the ball-carrier is LEGAL (no foul).
+  function possessionOkDemo(){
     return (async function(){
-      stopFollow(); clearHoldCinematic();
+      stopFollow(); clearL4Overlays(); clearHoldCinematic();
       const atk=PX._foulAtk||currentWhiteShooter(); if(!atk) return;
       const def=PX._foulDef||nearestBlue(atk);
       if(typeof ballCarrier!=='undefined') ballCarrier=atk;
-      atk.dataset.pose='v'; atk.dataset.rot=faceTo(+atk.dataset.x,+atk.dataset.y, BLUE_GOAL.x,BLUE_GOAL.y);
-      if(typeof place==='function') place(atk);
-      if(typeof moveBallTo==='function') moveBallTo(atk,'left');   // ball on the goal-side (left) hand
-      if(!def) return;
-      const ax=+atk.dataset.x, ay=+atk.dataset.y;
-      // defender closes from BEHIND (toward White's own goal = +x) and grabs
-      def.dataset.pose='v';
-      await swim(def, { x:ax+0.72, y:ay+0.12 }, 1000);
-      def.dataset.rot=faceTo(+def.dataset.x,+def.dataset.y, ax,ay); if(typeof place==='function') place(def);
-      // the tug — the carrier is pulled ~0.5m BACK, away from the goal
-      await swim(atk, { x:ax+0.5, y:ay }, 460);
+      atk.dataset.pose='v'; atk.dataset.rot=faceTo(+atk.dataset.x,+atk.dataset.y, BLUE_GOAL.x,BLUE_GOAL.y); if(typeof place==='function') place(atk);
       if(typeof moveBallTo==='function') moveBallTo(atk,'left');
-      if(typeof PX.whistle==='function'){ try{ PX.whistle(); }catch(e){} }
-      spotlightCircle(+atk.dataset.x, +atk.dataset.y, 2.4, false);
-      await delay(750);
+      if(def){ def.dataset.pose='v';
+        await swim(def, { x:(+atk.dataset.x)+0.6, y:(+atk.dataset.y)+0.14 }, 950);   // defender comes in hard on the carrier and STAYS
+        def.dataset.rot=faceTo(+def.dataset.x,+def.dataset.y, +atk.dataset.x,+atk.dataset.y); if(typeof place==='function') place(def); }
+      spotlightCircle(+atk.dataset.x, +atk.dataset.y, 2.4, false);   // NO whistle — this is allowed
+      await delay(1000);
     })();
   }
-  // 4.3 — the free-throw restart: the referee shows the direction (arrow toward the
-  // attacked blue goal) and the fouled team quickly passes to a teammate.
+  // 4.4 — the flip side: once the carrier LETS GO of the ball, continuing to dunk
+  // him (now a free player) is a foul.
+  function dunkAfterReleaseDemo(){
+    return (async function(){
+      stopFollow(); clearL4Overlays(); clearHoldCinematic();
+      const atk=PX._foulAtk||currentWhiteShooter(); if(!atk) return;
+      const def=PX._foulDef||nearestBlue(atk);
+      if(typeof ballCarrier!=='undefined') ballCarrier=atk;
+      atk.dataset.pose='v'; atk.dataset.rot=faceTo(+atk.dataset.x,+atk.dataset.y, (def?+def.dataset.x:0),(def?+def.dataset.y:0)); if(typeof place==='function') place(atk);
+      if(typeof moveBallTo==='function') moveBallTo(atk,'right');   // ball on the contested side
+      if(def){ def.dataset.pose='v'; def.dataset.x=(+atk.dataset.x)-0.85; def.dataset.y=+atk.dataset.y; def.dataset.rot=faceTo(+def.dataset.x,+def.dataset.y, +atk.dataset.x,+atk.dataset.y); if(typeof place==='function') place(def); }
+      await delay(750);
+      // the attacker RELEASES the ball (it comes off the hand, away from goal)
+      if(typeof ballCarrier!=='undefined') ballCarrier=null;
+      await moveBallXY((+atk.dataset.x)+1.4, (+atk.dataset.y)-0.7, 500);
+      await delay(200);
+      // the defender keeps dunking the now-free attacker -> FOUL
+      if(def){ await swim(def, { x:(+atk.dataset.x)-0.35, y:+atk.dataset.y }, 480); }
+      spotlightCircle(+atk.dataset.x, +atk.dataset.y, 2.2, false);
+      if(typeof PX.whistle==='function'){ try{ PX.whistle(); }catch(e){} }
+      await delay(800);
+    })();
+  }
+  // 4.5 — 2-metre offside: an attacker WITHOUT the ball slips into the 2m box
+  // (blinking red) ahead of the line of the ball.
+  function offsideDemo(){
+    return (async function(){
+      stopFollow(); clearL4Overlays(); clearHoldCinematic();
+      if(PX.blinkLines) PX.blinkLines('red');   // the 2-metre box in front of the blue goal
+      const carrier=PX._foulAtk||currentWhiteShooter();
+      // the ball carrier sits clearly OUTSIDE the 2m box (x=7), centred, holding the ball
+      if(carrier){ carrier.dataset.pose='v'; carrier.dataset.x=7.0; carrier.dataset.y=CY; carrier.dataset.rot=faceTo(7.0,CY, BLUE_GOAL.x,BLUE_GOAL.y); if(typeof place==='function') place(carrier); if(typeof ballCarrier!=='undefined') ballCarrier=carrier; if(typeof moveBallTo==='function') moveBallTo(carrier,'left'); }
+      const bx=(typeof ball!=='undefined'&&ball)?+ball.dataset.x:7.0;
+      // the "line of the ball": a dashed line across the field at the ball's depth
+      try{ const bd=boardEl(); if(bd){ const layer=fcSvgLayer(201); layer.id='pxBallLine';
+        layer.innerHTML=fcWrap('<line x1="'+bx+'" y1="5.5" x2="'+bx+'" y2="18.5" stroke="#ffd23f" stroke-width="0.16" stroke-dasharray="0.55 0.4"/>');
+        bd.appendChild(layer); requestAnimationFrame(()=>{ layer.style.opacity='1'; }); } }catch(e){}
+      // an off-ball attacker slips INTO the 2m box (x≈3.4), ahead of the ball line,
+      // on the upper side so he never overlaps the keeper at the goal centre.
+      const off = whiteFields().filter(w=>w!==carrier).sort((a,b)=>dist2(a,{x:5.6,y:CY-2.4})-dist2(b,{x:5.6,y:CY-2.4}))[0];
+      if(off){ off.dataset.pose='v'; off.dataset.x=5.6; off.dataset.y=CY-2.4; if(typeof place==='function') place(off);
+        await swimSettle(off, {x:3.4, y:CY-2.4}, 1300, faceTo(3.4,CY-2.4, BLUE_GOAL.x,BLUE_GOAL.y), 'v');   // into the 2m box, AHEAD of the ball line
+        spotlightCircle(3.4, CY-2.4, 1.8, false);
+        if(typeof PX.whistle==='function'){ try{ PX.whistle(); }catch(e){} }
+      }
+      await delay(900);
+    })();
+  }
+  // 4.6 — the free throw: three ways to take it (toss up / pass / direct shot from
+  // outside the 6-metre line, which blinks green).
   function freeThrowDemo(){
     return (async function(){
-      stopFollow(); clearHoldCinematic();
+      stopFollow(); clearL4Overlays(); clearHoldCinematic();
       const atk=PX._foulAtk||currentWhiteShooter(); if(!atk) return;
       if(typeof ballCarrier!=='undefined') ballCarrier=atk;
+      atk.dataset.pose='v'; if(typeof place==='function') place(atk);
       if(typeof moveBallTo==='function') moveBallTo(atk,'left');
-      // direction arrow (toward -x / the blue goal), drawn just above the carrier
-      try{ const bd=boardEl(); if(bd){ const layer=fcSvgLayer(201); layer.id='pxFTArrow';
-        const bx=+atk.dataset.x, by=Math.max(2.4, +atk.dataset.y - 2.0);
-        layer.innerHTML=fcWrap(svgArrow(bx-0.4, by, bx-3.2, by, '#12305a'));
-        bd.appendChild(layer); requestAnimationFrame(()=>{ layer.style.opacity='1'; }); } }catch(e){}
-      PX.flash('FREE THROW — WHITE','');
-      await delay(1500);
+      if(PX.blinkLines) PX.blinkLines('green');   // the 6m line — anchors the direct-shot option
+      PX.flash('FREE THROW','');
+      await ballTossUp(1.3, 300);           // option 1: toss it up to put the ball back in play
+      await delay(850);
       const mate=whiteFields().filter(w=>w!==atk)
         .sort((a,b)=>Math.hypot((+a.dataset.x)-(+atk.dataset.x),(+a.dataset.y)-(+atk.dataset.y))
                     - Math.hypot((+b.dataset.x)-(+atk.dataset.x),(+b.dataset.y)-(+atk.dataset.y)))[0];
-      if(mate){ await passBallTo(mate, 600); if(typeof ballCarrier!=='undefined') ballCarrier=mate; if(typeof moveBallTo==='function') moveBallTo(mate,'left'); PX._foulAtk=mate; }
-      const a=document.getElementById('pxFTArrow'); if(a){ a.style.opacity='0'; setTimeout(()=>a.remove(),400); }
-      await delay(250);
+      if(mate){ await passBallTo(mate, 600); if(typeof ballCarrier!=='undefined') ballCarrier=mate; if(typeof moveBallTo==='function') moveBallTo(mate,'left'); PX._foulAtk=mate; }   // option 2: a direct pass
+      await delay(300);
     })();
   }
-  // 4.5 — advantage: a defender fouls, but the attacker already has a clear path,
-  // so whistling would only help the defence. The referee lets play continue.
+  // 4.7 — advantage: a team is fouled but already has a clear chance, so the
+  // referee waves play on rather than taking that chance away.
   function advantageDemo(){
     return (async function(){
-      stopFollow(); clearHoldCinematic();
+      stopFollow(); clearL4Overlays(); clearHoldCinematic();
       const atk=PX._foulAtk||currentWhiteShooter(); if(!atk) return;
       const def=PX._foulDef||nearestBlue(atk);
       if(typeof ballCarrier!=='undefined') ballCarrier=atk;
@@ -11638,13 +11679,11 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       if(typeof moveBallTo==='function') moveBallTo(atk,'left');
       if(def){ def.dataset.pose='v'; def.dataset.x=(+atk.dataset.x)+0.72; def.dataset.y=(+atk.dataset.y)+0.28; def.dataset.rot=faceTo(+def.dataset.x,+def.dataset.y, +atk.dataset.x,+atk.dataset.y); if(typeof place==='function') place(def); }
       await delay(550);
-      // the carrier drives forward toward the goal despite the contact — play on
       const ax=+atk.dataset.x, ay=+atk.dataset.y;
       const dirx=BLUE_GOAL.x-ax, diry=BLUE_GOAL.y-ay, dl=Math.hypot(dirx,diry)||1;
-      const fwd={ x:ax+dirx/dl*2.4, y:ay+diry/dl*2.4 };
-      await swim(atk, fwd, 1200);
+      await swim(atk, { x:ax+dirx/dl*2.4, y:ay+diry/dl*2.4 }, 1200);   // the attacker keeps his clear path -> play on
       if(typeof moveBallTo==='function') moveBallTo(atk,'left');
-      if(def) swim(def, { x:(+atk.dataset.x)+0.95, y:(+atk.dataset.y)+0.28 }, 1000);   // defender trails behind
+      if(def) swim(def, { x:(+atk.dataset.x)+0.95, y:(+atk.dataset.y)+0.28 }, 1000);
       await delay(400);
     })();
   }
@@ -12369,17 +12408,17 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   };
 
   /* =====================================================================
-     LESSON 4 — ORDINARY FOULS   (focused: the NEW beats only. Physical
-     contact and the ball-under rule were taught in Lesson 2A; here we frame
-     the ordinary foul + whistle, the free-throw restart, a quick ball-under
-     attribution check, and the advantage / "play on" idea.)
+     LESSON 4 — ORDINARY FOULS
+     Correct rules. The possession principle (attacking the ball-carrier is
+     legal) is RE-ANCHORED, then the three common ordinary fouls are shown:
+     ball-under, dunking a player who has released the ball, and 2-metre
+     offside. Then the free throw (three options) and advantage.
      ===================================================================== */
   PX.buildLesson4Steps = function(){
     const steps=[];
 
-    // 4.1 — set the scene (White attacking the blue goal) + the framing: most
-    // whistles are ordinary fouls and nobody has to leave the pool.
-    steps.push(watch('You will hear the referee’s whistle often. Most of the time it signals an ordinary foul — the most common stoppage in Water Polo — and it does NOT send anyone out of the pool. (Remember: normal body contact on its own is not a foul.)',
+    // 4.1 — frame the whistle + set the scene (White attacking the blue goal).
+    steps.push(watch('You will hear the referee’s whistle often. Most whistles are ordinary fouls — the most common, minor stoppages. The other team gets a free throw and nobody has to leave the pool. (A more serious foul, an exclusion, DOES send a player out — that’s the next lesson.)',
       function(){
         PX.field.setPhase('lines'); PX.clearActors(); PX.ensureOffenseBoard();
         PX.centerDuel(false);   // hold the scene still while we explain
@@ -12389,39 +12428,33 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
         const atk=PX._foulAtk; if(atk){ if(typeof ballCarrier!=='undefined') ballCarrier=atk; if(typeof moveBallTo==='function') moveBallTo(atk,'left'); PX.updateTeamLayering(); }
       }));
 
-    // 4.2 — an ordinary foul happens: the demo plays, then the ORDINARY FOUL
-    // headline lands (which hides the banner) before the explanation box opens.
-    steps.push(animatedWatch('Watch: a defender pulls back the White player who IS holding the ball. One short whistle — an ordinary foul. Because that player had the ball, nobody is sent out; play just stops for a moment.',
-      function(){ return ordinaryFoulDemo().then(()=>{ PX._leadFlash('ORDINARY FOUL',''); }); }));
+    // 4.2 — RE-ANCHOR the possession principle: attacking the ball-carrier is legal.
+    steps.push(animatedWatch('First, the key idea behind fouls: a player who is HOLDING the ball may be grabbed, held, even pushed under — and that is NOT a foul. Going hard for the ball, and for the player holding it, is completely allowed. (Only genuinely violent play would be punished.)',
+      function(){ return possessionOkDemo().then(()=>{ PX._leadFlash('THIS IS NOT A FOUL','good'); }); }));
 
-    // 4.3 — the free-throw restart
-    steps.push(animatedWatch('After an ordinary foul the referee shows which way play goes, and the fouled team restarts quickly with a free throw. They usually pass to a teammate — and from outside the 6-metre line they may even shoot straight away.',
+    // 4.3 — ordinary foul #1: ball-under.
+    steps.push(animatedWatch('An ordinary foul, then, is a smaller, technical infringement. The most common is the BALL-UNDER: a player taking the ball under the surface while being challenged for it. The player touching the ball commits it — free throw to the other team.',
+      function(){ return ballUnderDemo().then(()=>{ if(typeof PX.whistle==='function'){ try{ PX.whistle(); }catch(e){} } }); }));
+
+    // 4.4 — ordinary foul #2: dunking a player who has RELEASED the ball.
+    steps.push(animatedWatch('Now the flip side of that first idea: the defender attacks the ball and the White player LETS GO of it. From that moment White no longer has the ball — so continuing to push or dunk him under is a foul.',
+      function(){ return dunkAfterReleaseDemo(); }));
+
+    // 4.5 — ordinary foul #3: 2-metre offside.
+    steps.push(animatedWatch('The third is OFFSIDE at the 2-metre line — the red box in front of the goal. An attacker WITHOUT the ball may not slip into that box ahead of the ball (the yellow line marks where the ball is). How far he can go depends on where the ball is; going in ahead of it is a foul.',
+      function(){ return offsideDemo(); }));
+
+    // 4.6 — the free throw: three options.
+    steps.push(animatedWatch('After an ordinary foul the fouled team takes a free throw. They have three choices: toss the ball up to put it back in play, pass it straight to a team-mate, or — when the ball is outside the 6-metre line (green) — shoot directly at the goal, no matter where the foul happened.',
       function(){ return freeThrowDemo(); }));
 
-    // 4.4 YOU TRY — a quick ball-under attribution check (callback to Lesson 2A).
-    steps.push({
-      instruction:'One common ordinary foul is “ball under”. White is holding the ball and Blue challenges for it. During the duel the ball is taken under the surface. Who committed the foul?',
-      bannerSide:'top', skipDimPhase:true, highlight:null,
-      onEnter:function(){ PX._l4q=false; clearHoldCinematic();
-        const atk=PX._foulAtk||currentWhiteShooter(); const def=PX._foulDef||(atk?nearestBlue(atk):null);
-        if(atk){ atk.dataset.pose='v'; if(def) atk.dataset.rot=faceTo(+atk.dataset.x,+atk.dataset.y, +def.dataset.x,+def.dataset.y);
-          if(typeof ballCarrier!=='undefined') ballCarrier=atk; if(typeof moveBallTo==='function') moveBallTo(atk,'right'); if(typeof place==='function') place(atk); }
-        if(def && atk){ def.dataset.pose='v'; def.dataset.x=(+atk.dataset.x)-0.85; def.dataset.y=+atk.dataset.y; def.dataset.rot=faceTo(+def.dataset.x,+def.dataset.y, +atk.dataset.x,+atk.dataset.y); if(typeof place==='function') place(def); }
-        if(atk) spotlightCircle(+atk.dataset.x, +atk.dataset.y, 2.3, false);
-        PX.choice.ask({ options:[{label:'WHITE',value:'white'},{label:'BLUE',value:'blue'}], correct:'white',
-          onAnswer:function(v,ok){ if(ok){ PX.choice.clear(); clearHoldCinematic(); PX.flash('Correct — the player TOUCHING the ball as it goes\nunder commits the foul. Possession goes to Blue.','good'); setTimeout(()=>{ PX._l4q=true; }, 2200); } } });
-      },
-      validate:{ type:'custom', fn:()=> PX._l4q===true },
-      autoComplete:function(){ PX.choice.clear(); clearHoldCinematic(); PX.flash('Correct — the player touching the ball commits it.\nPossession goes to Blue.','good'); setTimeout(()=>{ PX._l4q=true; }, 1600); }
-    });
-
-    // 4.5 — advantage / play on
-    steps.push(animatedWatch('The referee does not whistle every foul. If stopping play would only take away a good chance the attacking team already has, the referee lets play continue. This is called advantage.',
+    // 4.7 — advantage / play on.
+    steps.push(animatedWatch('The referee doesn’t whistle every foul. If a team is fouled but already has a clear chance, stopping play would only waste it — so the referee lets play continue. This is called advantage.',
       function(){ return advantageDemo().then(()=>{ PX._leadFlash('ADVANTAGE — PLAY ON',''); }); }));
 
-    // 4.6 — wrap-up: LESSON 4 COMPLETE headline FIRST, then the recap box (wider).
-    steps.push(watchLeadFlash('UNDERSTAND\n• An ordinary foul is the most common stoppage — a single whistle, and nobody leaves the pool.\n• Pulling, holding or impeding a player, and taking the ball under while challenged, are ordinary fouls.\n• On a ball-under, the player touching the ball as it goes under is the one who commits it.\n• Play restarts quickly with a free throw for the other team.\n• Sometimes the referee lets play go on instead — that is advantage.',
-      'LESSON 4 COMPLETE', 'good', ()=>{ PX.followBall(false); const bn=document.getElementById('tutorialBanner'); if(bn) bn.classList.add('pxWide'); }));
+    // 4.8 — wrap-up: LESSON 4 COMPLETE headline FIRST, then the recap box (wider).
+    steps.push(watchLeadFlash('UNDERSTAND\n• Attacking the ball, and the player holding it, is allowed — that is not a foul.\n• Ordinary fouls are smaller, technical infringements: ball-under, dunking a player who has let go of the ball, and 2-metre offside.\n• An ordinary foul gives the other team a free throw, and nobody leaves the pool.\n• A free throw can be tossed up, passed, or — from outside 6 m — shot straight at goal.\n• The referee can wave play on when whistling would only take away a clear chance (advantage).',
+      'LESSON 4 COMPLETE', 'good', ()=>{ if(PX.stopLineBlink) PX.stopLineBlink(); PX.followBall(false); const bn=document.getElementById('tutorialBanner'); if(bn) bn.classList.add('pxWide'); }));
 
     return steps;
   };
@@ -12674,6 +12707,21 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     if(next!=null && typeof goToTutorialStep==='function'){ PX.primeForLesson(next); goToTutorialStep(next); }
     else PX.flash('That’s the last lesson so far','',2000);
   };
+  // Lesson names for the jump-to-lesson picker (index matches _lessonStarts).
+  PX._lessonTitles = ['Lesson 1 — The Pool & the Players','Lesson 2 — How the Game Works','Lesson 3 — Possession & the Shot Clock','Lesson 4 — Ordinary Fouls'];
+  // Which lesson the current step belongs to (0-based).
+  PX.currentLesson = function(){
+    const starts=PX._lessonStarts||[0];
+    const cur=(typeof tutorialStepIndex!=='undefined' && tutorialStepIndex>=0)?tutorialStepIndex:0;
+    let L=0; for(let k=0;k<starts.length;k++){ if(cur>=starts[k]) L=k; } return L;
+  };
+  // Jump to any lesson by index (rebuilds that lesson's scene, exactly like nextLesson).
+  PX.gotoLesson = function(i){
+    const starts=PX._lessonStarts||[0];
+    if(i==null || i<0 || i>=starts.length) return;
+    const idx=starts[i];
+    if(typeof goToTutorialStep==='function'){ PX.primeForLesson(idx); goToTutorialStep(idx); }
+  };
 
   // ---- WP-only end / restart (fully independent of the coach experience) ----
   PX.showWpEnd = function(kind){
@@ -12699,10 +12747,28 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     row.appendChild(dlgBtn('Restart tutorial','font:800 18px system-ui;color:#fff;background:#1b7373;border:2px solid #4bb8bd;border-radius:999px;padding:14px 34px;cursor:pointer', ()=>{ ov.remove(); PX.restartWp(); }));
     if(kind!=='complete'){
       row.appendChild(dlgBtn('Keep going','font:800 18px system-ui;color:#0b2b2b;background:#4bb8bd;border:none;border-radius:999px;padding:14px 34px;cursor:pointer', ()=>{ ov.remove(); PX.showNav(); }));
-      // "Move to next lesson" lives here (rarely needed) rather than cluttering the nav.
-      row.appendChild(dlgBtn('Move to next lesson →','font:800 18px system-ui;color:#fff;background:#1a6363;border:2px solid #4bb8bd;border-radius:999px;padding:14px 34px;cursor:pointer', ()=>{ ov.remove(); PX.showNav(); PX.nextLesson(); }));
     }
     ov.appendChild(row);
+
+    // ---- Jump-to-lesson picker: a drop-down of every lesson (defaults to the
+    // next one, so the common "skip ahead" is one tap on Go). Shown for the
+    // exit dialog AND on the completion screen (to replay any lesson).
+    const starts=PX._lessonStarts||[0];
+    if(starts.length>1){
+      const picker=make('div'); picker.style.cssText='display:flex;flex-direction:column;align-items:center;gap:12px;margin-top:28px;pointer-events:auto;';
+      const plabel=make('div'); plabel.textContent = kind==='complete' ? 'Replay any lesson:' : 'Or jump straight to a lesson:';
+      plabel.style.cssText='font:700 15px system-ui;color:#cfeaea;';
+      const controls=make('div'); controls.style.cssText='display:flex;gap:12px;flex-wrap:wrap;justify-content:center;align-items:center;pointer-events:auto;';
+      const titles=PX._lessonTitles||[];
+      const sel=make('select'); sel.id='pxLessonSelect';
+      sel.style.cssText='font:700 16px system-ui;color:#0b2b2b;background:#fff;border:2px solid #4bb8bd;border-radius:12px;padding:12px 16px;cursor:pointer;pointer-events:auto;touch-action:manipulation;min-width:min(320px,86vw);appearance:auto;';
+      const def = kind==='complete' ? 0 : Math.min((PX.currentLesson?PX.currentLesson():0)+1, starts.length-1);
+      for(let i=0;i<starts.length;i++){ const o=make('option'); o.value=String(i); o.textContent=titles[i]||('Lesson '+(i+1)); if(i===def) o.selected=true; sel.appendChild(o); }
+      const go=dlgBtn('Go →','font:800 17px system-ui;color:#fff;background:#1a6363;border:2px solid #4bb8bd;border-radius:999px;padding:13px 32px;cursor:pointer', ()=>{ const i=parseInt(sel.value,10)||0; ov.remove(); PX.showNav(); PX.gotoLesson(i); });
+      controls.appendChild(sel); controls.appendChild(go);
+      picker.appendChild(plabel); picker.appendChild(controls);
+      ov.appendChild(picker);
+    }
     document.body.appendChild(ov);
   };
   PX.restartWp = function(){
