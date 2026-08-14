@@ -10820,6 +10820,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     });
   }
   PX.setupOffense = async function(){
+    PX.centerDuel(false);   // stop any prior duel so the center pair swim across leading with the head
     PX._viewBias=-0.16;   // White attacks the blue goal (bottom of the view) -> bias down to show it
     // Blend in the field zones they are swimming to, THEN swim (each ~5s).
     if(typeof selectFieldZoneSet==='function'){
@@ -10864,10 +10865,10 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     const cW={ x:BLUE_GOAL.x+2.5, y:CY };
     const cWrot=faceTo(cW.x,cW.y, ballCarrierPt.x,ballCarrierPt.y);
     anims.push(swimSettle(centerWhite, cW, 5000, cWrot, 'v'));
-    // Blue center defender vs the white center forward — a live duel (both face the
-    // ball; defender horizontal behind, vertical if the center gets the ball).
+    // Blue center defender: swim ACROSS like everyone else (head leads), then hand it
+    // to the live duel once it has arrived (below).
     const blueCenterDef = blues.filter(b=>usedBlue.indexOf(b)<0)[0];
-    PX.setCenterDuel(centerWhite, blueCenterDef, BLUE_GOAL); PX.centerDuel(true);
+    if(blueCenterDef){ const hug=centerDefSpot({x:cW.x,y:cW.y}, BLUE_GOAL, ballCarrierPt, false); anims.push(swimSettle(blueCenterDef, {x:hug.x,y:hug.y}, 5000, hug.rot, hug.pose)); }
 
     // Goalkeepers
     const bgk=blueGoalie(), wgk=whiteGoalie();
@@ -10876,13 +10877,16 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
 
     await Promise.all(anims);
     if(carrier && typeof moveBallTo==='function') moveBallTo(carrier, 'right');   // ball rests with zone-4 attacker
+    if(centerWhite && blueCenterDef){ PX.setCenterDuel(centerWhite, blueCenterDef, BLUE_GOAL); PX.centerDuel(true); }   // duel starts only after the swim
     PX.enterFrontCourt();   // teams are set up in the zones -> zoom to the attacking half
+    PX.followGoal('blue');   // keep the attacked (blue) goal in view for the whole set-up
   };
 
   // After Blue wins the ball, the teams set up in the WHITE half (mirror of the
   // offense set-up) — Blue attacking the white goal, White defending. Stays full court.
   PX.setupWhiteHalf = async function(){
     stopFollow();
+    PX.centerDuel(false);   // stop any prior duel so the center pair swim across leading with the head
     PX._viewBias=0.16;   // bias the view UP so at least half the depth of the attacking goal is visible
     const blues=blueFields(), whites=whiteFields();
     // The blue CENTER (hole set) is always #7 (label B6) so the rebound that drops to
@@ -10904,14 +10908,17 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     });
     const cB={ x:WHITE_GOAL.x-2.5, y:CY }, ballPt=zoneCentroidRight('z4');
     if(centerBlue) anims.push(swimSettle(centerBlue, cB, 3500, faceTo(cB.x,cB.y, ballPt.x,ballPt.y), 'v'));
-    // White center defender vs the blue center forward — a live duel.
+    // White center defender: swim ACROSS like everyone else (head leads the direction),
+    // then hand it to the live duel once it has arrived (below).
     const centerWhite=whites.filter(w=>usedWhite.indexOf(w)<0)[0];
-    if(centerBlue && centerWhite){ PX.setCenterDuel(centerBlue, centerWhite, WHITE_GOAL); PX.centerDuel(true); }
+    if(centerWhite){ const hug=centerDefSpot({x:cB.x,y:cB.y}, WHITE_GOAL, ballPt, false); anims.push(swimSettle(centerWhite, {x:hug.x,y:hug.y}, 3500, hug.rot, hug.pose)); }
     const wgk=whiteGoalie(), bgk=blueGoalie();
     if(wgk) anims.push(swimVerticalTrack(wgk, {x:WHITE_GOAL.x-0.6, y:CY}, 3500, ballPt));   // white GK defends the right goal
     if(bgk) anims.push(swimSettle(bgk, {x:BLUE_GOAL.x+4, y:CY}, 3500, 90, 'h'));
     await Promise.all(anims);
     if(carrier && typeof moveBallTo==='function') moveBallTo(carrier, 'left');   // ball on the goal-side (left) hand toward the white goal
+    if(centerBlue && centerWhite){ PX.setCenterDuel(centerBlue, centerWhite, WHITE_GOAL); PX.centerDuel(true); }   // duel starts only after the swim
+    PX.followGoal('white');   // keep the attacked (white) goal in view for the whole set-up
   };
 
   // A substitution: one field player per team (not the goalie) swims out at the
@@ -11387,6 +11394,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   function restartToBlue(){
     PX.hideGoalZoom();         // ensure the goal-line close-up is gone
     stopFollow();              // release the shooter's defender-follow before repositioning
+    PX.centerDuel(false); PX.setCenterDuel(null,null,null);   // no center duel during the kick-off (it would drag #7 around)
     setShootingAngle(false);   // never carry the shooting-angle lines into the kick-off (they'd redraw for the new carrier)
     clearHoldCinematic();      // drop any lingering spotlight/ring
     PX.exitFrontCourt();       // the kick-off is at the center of the pool -> show the full court again
@@ -11419,6 +11427,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   // the Lesson 1 -> 2 hand-off. No-op during normal continuous play.
   PX.ensureOffenseBoard = function(){
     PX._viewBias=-0.16;   // White attacks the blue goal (bottom) -> bias down to show it
+    PX.followGoal('blue');   // anchor the blue goal in view
     if(qa('.player').length >= 12) return;
     PX.clearActors();
     const ballPt = zoneCentroid('z4');
@@ -11675,7 +11684,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   // hand pressing down on White's hand and the ball going fully under. Illustration only.
   PX.hideBallUnderZoom = function(){ const w=document.getElementById('pxBallUnderZoom'); if(w) w.remove(); };
   PX.showBallUnderZoom = function(){
-    return new Promise(function(res){
+    return (async function(){
       PX.hideBallUnderZoom();
       const gen=PX._animGen;
       const D=Math.round(Math.min(300, Math.min(window.innerWidth, window.innerHeight)*0.72));
@@ -11692,11 +11701,11 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
         +'</svg>';
       const bs=D*0.36;
       const ball=make('div'); ball.id='pxBUBall';
-      ball.style.cssText='position:absolute;left:50%;top:'+surf+'%;width:'+bs+'px;height:'+bs+'px;border-radius:50%;transform:translate(-50%,-50%);transition:top .9s cubic-bezier(.5,0,.5,1);'
+      ball.style.cssText='position:absolute;left:50%;top:'+surf+'%;width:'+bs+'px;height:'+bs+'px;border-radius:50%;transform:translate(-50%,-50%);transition:top .8s cubic-bezier(.5,0,.5,1);'
         +'background:radial-gradient(circle at 35% 30%,#ffe680,#f2b100 62%,#c98800);box-shadow:0 3px 10px rgba(0,0,0,.4);';
       wrap.appendChild(ball);   // ball centred on the surface = half above / half under
       function hand(id, fill){ const h=make('div'); h.id=id;
-        h.style.cssText='position:absolute;left:50%;transform:translate(-50%,-50%);width:'+(bs*1.0)+'px;height:'+(bs*0.72)+'px;transition:top .7s ease;pointer-events:none;';
+        h.style.cssText='position:absolute;left:50%;transform:translate(-50%,-50%);width:'+(bs*1.0)+'px;height:'+(bs*0.72)+'px;transition:top .6s ease;pointer-events:none;';
         h.innerHTML='<svg viewBox="0 0 100 72" width="100%" height="100%">'
           +'<path d="M8 42 Q 50 -6 92 42 L 92 54 Q 50 30 8 54 Z" fill="'+fill+'" stroke="rgba(0,0,0,.25)" stroke-width="1.4"/>'   // cupped palm over the ball
           +'<rect x="16" y="46" width="9" height="20" rx="4.5" fill="'+fill+'" stroke="rgba(0,0,0,.18)" stroke-width="1"/>'
@@ -11709,18 +11718,21 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       const wHand=hand('pxBUW', '#eef2f6');   // White #5's hand (in direct contact on the ball)
       const bHand=hand('pxBUB', '#2f5fa8');   // Blue #2's hand (presses on top of White's hand)
       const ballTop = surf - (bs/D*100)*0.5;  // top of the ball, in %
-      wHand.style.top=(ballTop+3)+'%';        // White palm cups the ball's top
-      bHand.style.top='-24%';                 // Blue hand starts above, out of frame
-      // small labels for the two hands
-      const tag=make('div'); tag.style.cssText='position:absolute;left:0;right:0;bottom:7%;text-align:center;font:800 12px system-ui;color:#0b1a33;text-shadow:0 1px 3px rgba(255,255,255,.7);'; tag.textContent='White #5 on the ball · Blue #2 pressing'; wrap.appendChild(tag);
       document.body.appendChild(wrap);
-      genTimeout(function(){ bHand.style.top=(ballTop-4)+'%'; }, 800);   // Blue hand comes down onto White's hand
-      genTimeout(function(){                                             // the ball is pushed fully UNDER the surface
-        ball.style.top=(surf + (bs/D*100)*0.6)+'%';
-        wHand.style.top=(surf + (bs/D*100)*0.12)+'%'; bHand.style.top=(surf - (bs/D*100)*0.32)+'%';
-      }, 1900);
-      genTimeout(function(){ if(PX._animGen!==gen){ return; } res(); }, 3300);
-    });
+      function reset(){ ball.style.transition='none'; bHand.style.transition='none';
+        ball.style.top=surf+'%'; wHand.style.top=(ballTop+3)+'%'; bHand.style.top='-26%';
+        void wrap.offsetWidth;   // force a reflow so the next transition animates from here
+        ball.style.transition='top .8s cubic-bezier(.5,0,.5,1)'; bHand.style.transition='top .6s ease'; wHand.style.transition='top .6s ease';
+      }
+      // Play the whole thing THREE times (the instruction box stays up alongside).
+      for(let c=0;c<3;c++){
+        if(PX._animGen!==gen) return;
+        reset(); await delay(450);
+        bHand.style.top=(ballTop-4)+'%'; await delay(850);                                          // Blue hand comes down onto White's hand
+        ball.style.top=(surf+(bs/D*100)*0.6)+'%'; wHand.style.top=(surf+(bs/D*100)*0.12)+'%'; bHand.style.top=(surf-(bs/D*100)*0.32)+'%'; await delay(1200);   // ball pushed fully UNDER
+        await delay(650);
+      }
+    })();
   };
 
   PX.buildLesson2Steps = function(){
@@ -11812,7 +11824,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       instruction:'Tap the marked spot on the goal line as your target, then press SHOOT.',
       bannerSide:'top', skipDimPhase:true, highlight:null,
       onEnter:function(){ PX._goalScored=false; clearHoldCinematic();
-        PX.enterFrontCourt(); PX.followBall(false); PX._viewBias=-0.22; PX.centerOnBall();   // keep the shooter AND the goal in the clickable view
+        PX.enterFrontCourt(); PX.followGoal('blue');   // anchor the blue goal so the goal line (tap target) stays in the clickable view
         beginParentShot(); },
       validate:{ type:'custom', fn:()=> PX._goalScored===true },
       autoComplete:function(){ if(PX.shoot&&PX.shoot.cancel) PX.shoot.cancel(); setShootingAngle(false); PX.flash('GOAL!','goal'); setTimeout(()=>{ PX._goalScored=true; }, 900); }   // Next: score it for them
@@ -11854,8 +11866,10 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       autoComplete:function(){ qa('[data-px="goaltap"]').forEach(e=>e.remove()); pulseGoal('right','#1565c0',1400); PX.flash('Correct — Blue attacks this way','good'); setTimeout(()=>{ PX._goalTapped=true; }, 1800); }   // Next: point out the White goal
     });
 
-    // 2.9b Teams set up in the WHITE half (mirror of the earlier offense set-up) — full court
-    steps.push(ackThenAnimate('Now Blue is in attack, and White defends to protect their goal.',
+    // 2.9b Teams set up in the WHITE half (mirror of the earlier offense set-up).
+    // Runs the set-up ON ENTER so Blue #7 (the center) is already swimming to the
+    // centre as the instruction appears — never left in the kick-off formation.
+    steps.push(animatedWatch('Now Blue is in attack, and White defends to protect their goal.',
       function(){ PX.exitFrontCourt(); return PX.setupWhiteHalf(); }));
 
     // 2.10 The game clock — periods, breaks between them, and time-outs
@@ -11882,7 +11896,8 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
      ===================================================================== */
   function scState(){ return (typeof MIZE!=='undefined' && MIZE.State) ? MIZE.State.shotClock : null; }
   function scRender(){ if(typeof updateShotClockDisplay==='function') updateShotClockDisplay(); }
-  PX.showShotClock = function(n){ const s=scState(); if(!s) return; s.direction='down'; s.seconds = (n==null?28:n); s.active=true; scRender(); };
+  PX.showShotClock = function(n){ const s=scState(); if(!s) return; if(PX._clockTimer){ clearInterval(PX._clockTimer); PX._clockTimer=null; }   // stop any running countdown -> HOLD at n until told to tick again
+    s.direction='down'; s.seconds = (n==null?28:n); s.active=true; scRender(); };
   PX.setShotClock = function(n){ const s=scState(); if(!s) return; s.seconds=Math.max(0,n); s.active=true; scRender(); };
   PX.hideShotClock = function(){ const s=scState(); if(PX._clockTimer){ clearInterval(PX._clockTimer); PX._clockTimer=null; } if(typeof stopShotClock==='function') stopShotClock(); if(s){ s.active=false; s.running=false; } scRender(); };
   // Animate a countdown from `from` down to `to` (inclusive), one count per stepMs.
@@ -11920,6 +11935,26 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       }catch(e){}
     }, 120);
   };
+  // Anchor the view on an ATTACKED GOAL so it (and the net behind it) is ALWAYS visible
+  // during a tactical set-up — independent of where the ball is (the ball can move to
+  // the perimeter during passing without the goal ever scrolling off screen). The white
+  // goal renders at the TOP of the front-court view, the blue goal at the BOTTOM.
+  PX.followGoal = function(goalTeam){
+    if(PX._followScroll){ clearInterval(PX._followScroll); PX._followScroll=null; }
+    if(!goalTeam) return;
+    const isW=(goalTeam==='white'); const frac = isW ? 0.19 : 0.81;   // keep the keeper this far from the near edge (net beyond it shows)
+    PX._followScroll=setInterval(function(){
+      try{
+        if(typeof frontCourtActive==='undefined' || !frontCourtActive) return;
+        const wrap=document.getElementById('stageWrap'); if(!wrap) return; const wr=wrap.getBoundingClientRect(); if(!wr.height) return;
+        const gk=[...document.querySelectorAll('.player[data-team=goalie]')].find(g=>(g.dataset.label||'')[0]===(isW?'W':'B'));
+        if(!gk) return; const gr=gk.getBoundingClientRect(); if(!gr.height) return;
+        const delta=(gr.top+gr.height/2 - wr.top) - wr.height*frac;
+        if(Math.abs(delta)>2) wrap.scrollTop += delta*0.25;   // ease the goal to its anchor
+      }catch(e){}
+    }, 120);
+  };
+  PX.centerOnGoal = function(goalTeam){ PX.followGoal(goalTeam); setTimeout(function(){ /* let a couple of eases run, then it holds */ }, 0); };
 
   /* --------------------------- Blue-attack helpers (mirror of the White ones) */
   function bluePassRoutine(){
@@ -12005,7 +12040,19 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     // 3.1a (Step 47) New possession. FIRST the shot clock blends in with a spotlight +
     // red frame (banner hidden), THEN box 1 appears. The red frame stays through box 2.
     steps.push(ackThenAnimatePreview('A team cannot keep the ball forever. Each new possession starts with a shot clock — up to 28 seconds to create a shot. It runs whenever the ball is in play and only pauses for a foul or after a goal.',
-      function(){ PX.enterFrontCourt(); PX.hideShotClock(); PX.followBall(false);
+      function(){ PX.enterFrontCourt();
+        // START every player at the BLUE goal end — a fresh possession. Works both on a
+        // lesson-skip AND in continuous play (Lesson 2 left the teams at the WHITE goal,
+        // so we force a rebuild here instead of relying on the leftover positions).
+        PX.clearActors(); PX.ensureOffenseBoard();
+        // ensureOffenseBoard re-arms a (white-attacking) center duel; freeze it for this
+        // static preview so nothing ticks the center pair while Blue holds the ball.
+        PX.centerDuel(false);
+        // Blue has just won the ball at their own (blue) goal and will break out to the
+        // white goal in the next step, so put the ball in a blue field player's hand.
+        const bc = blueFields()[0]; if(bc && typeof moveBallTo==='function'){ moveBallTo(bc,'left'); PX.updateTeamLayering(); }
+        PX.followGoal('blue');   // keep the blue goal anchored while the box shows
+        PX.hideShotClock();
         PX.showShotClock(28); PX.highlightShotClock(-1); PX.flash('SHOT CLOCK — 28',''); },   // persistent spotlight + red frame
       function(){ /* box 1 just needs the confirm; the swim starts after box 2 */ }));
 
@@ -12020,7 +12067,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     // 3.2 (Step 48) The offense sets up and tries to create scoring chances; the clock
     // keeps running the WHOLE time the ball is passed around (it never freezes mid-pass).
     steps.push(animatedWatch('During their attacking time the offensive team is setting up and tries to create scoring opportunities.',
-      function(){ PX.enterFrontCourt(); PX.followBall(true); PX.tickShotClock(19, 9, 480); return bluePassRoutine(); }));
+      function(){ PX.enterFrontCourt(); PX.followGoal('white'); PX.tickShotClock(19, 9, 480); return bluePassRoutine(); }));
 
     // 3.3 (Step 49) YOU TRY — tap SHOOT: the keeper blocks it, the ball drops to Blue's center
     function resolveShot1(){ if(PX._l3s1) return; PX._l3s1='running';
@@ -12040,7 +12087,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
 
     // 3.4 (Step 50) The clock resets to 18
     steps.push(watch('Blue kept possession after the rebound. The shot clock is reset to 18 seconds — except there was still more time on it.',
-      ()=>{ PX.enterFrontCourt(); PX.followBall(true); PX.centerOnBall(); PX.showShotClock(18); PX.flash('SHOT CLOCK — 18','',1500); }));
+      ()=>{ PX.enterFrontCourt(); PX.followGoal('white'); PX.showShotClock(18); PX.flash('SHOT CLOCK — 18','',1500); }));
 
     // 3.5 (Step 51) The ball is worked around (#7→#4→#2, keeper slides sideways),
     // then YOU TRY — tap SHOOT: the keeper blocks AND controls it (possession changes)
@@ -12050,7 +12097,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     steps.push({
       instruction:'The ball is worked around to open a better angle. Try it again — tap SHOOT.',
       bannerSide:'top', skipDimPhase:true, highlight:null, allowedSelectors:['#pxL3ShootBtn'],
-      onEnter:function(){ PX.enterFrontCourt(); PX.followBall(true); PX._l3save=false; PX.tickShotClock(18, 10, 340);   // keeps running the whole passing (no freeze)
+      onEnter:function(){ PX.enterFrontCourt(); PX.followGoal('white'); PX._l3save=false; PX.tickShotClock(18, 10, 340);   // keeps running the whole passing (no freeze)
         const b7=blueByCap(7)||blueCenter()||blueFields()[0];
         if(b7){ if(typeof ballCarrier!=='undefined') ballCarrier=b7; if(typeof moveBallTo==='function') moveBallTo(b7,'left'); if(typeof place==='function') place(b7); }   // Blue #7 secures the ball in his LEFT hand
         let seq=[ blueByCap(4), blueByCap(2) ].filter(Boolean);
@@ -12078,6 +12125,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     // defender starts marking his attacker and must be dragged into the passing
     // line between White #2 and White #3.
     async function swimToInterceptSetup(){
+      PX.centerDuel(false);   // stop any prior duel so the center pair swim across leading with the head
       PX._viewBias=-0.16;   // White attacks the blue goal (bottom of the view) -> bias down to show it
       const whites=whiteFields(), blues=blueFields();
       const carrier = whiteByCap(2) || whites[0];                          // White #2 -> zone 4 (ends with the ball)
@@ -12107,9 +12155,11 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
         const b=blues[idx]; usedB.push(b);
         if(b) anims.push(swimSettle(b, dp, 2600, faceTo(dp.x,dp.y, c.x,c.y), 'v'));
       });
+      let centerDefEl=null;
       if(centerW){ const cW={ x:BLUE_GOAL.x+2.5, y:CY }; const bp=zoneCentroid('z4');
         anims.push(swimSettle(centerW, cW, 2600, faceTo(cW.x,cW.y, bp.x,bp.y), 'v'));
-        const cd=blues.filter(b=>usedB.indexOf(b)<0)[0]; if(cd){ PX.setCenterDuel(centerW, cd, BLUE_GOAL); PX.centerDuel(true); } }
+        centerDefEl=blues.filter(b=>usedB.indexOf(b)<0)[0];   // swim it across (head leads); the duel starts after the swim
+        if(centerDefEl){ const hug=centerDefSpot({x:cW.x,y:cW.y}, BLUE_GOAL, bp, false); anims.push(swimSettle(centerDefEl, {x:hug.x,y:hug.y}, 2600, hug.rot, hug.pose)); } }
       if(bgk) anims.push(swimVerticalTrack(bgk, {x:BLUE_GOAL.x+0.6, y:CY}, 2600, zoneCentroid('z4')));   // Blue GK swims back to its goal
       if(wgk) anims.push(swimSettle(wgk, {x:WHITE_GOAL.x-4, y:CY}, 2600, 270, 'h'));
       // Ball routing: GK -> right wing (at the middle line) -> the wing carries it to
@@ -12130,6 +12180,8 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       await Promise.all(anims);
       await routing;
       gkTrackBall(bgk, {x:+carrier.dataset.x, y:+carrier.dataset.y});   // Blue keeper: smart blocking position vs the ball (within the posts)
+      if(centerW && centerDefEl){ PX.setCenterDuel(centerW, centerDefEl, BLUE_GOAL); PX.centerDuel(true); }   // duel starts only after the swim across
+      PX.followGoal('blue');   // keep the attacked (blue) goal in view
       return { carrier:carrier, receiver:receiver, def:blues[1] };       // blues[1] marks the receiver (zone 3)
     }
     const step53 = {
@@ -12142,7 +12194,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
           intPasser=carrier; intDef=def;
           const p2={ x:+carrier.dataset.x, y:+carrier.dataset.y }, p3={ x:+receiver.dataset.x, y:+receiver.dataset.y };
           intTarget={ x:(p2.x+p3.x)/2, y:(p2.y+p3.y)/2 };   // a point on the #2 -> #3 passing line
-          PX.followBall(false); PX.centerOnBall();
+          PX.followGoal('blue');   // anchor the blue goal in view during the drag (no ball-chasing)
           PX.centerDuel(false); PX.updateTeamLayering();   // STOP the 140ms duel/layering ticker so it can't interfere with the drag
           PX.clearSelections(); if(typeof setSelected==='function') setSelected(def, true);
           spotlightBetween(p2.x,p2.y,p3.x,p3.y,false);   // ONE red circle enclosing White #2 (ball) and White #3
@@ -12161,7 +12213,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     // 3.6b (Step 54) The pass is intercepted. INTERCEPTED shows FIRST (it hides the
     // banner); the instruction box opens once it has vanished. The clock resets to 28.
     steps.push(animatedWatch('New possession — by reading the pass, Blue wins the ball. The shot clock resets to 28 seconds.',
-      function(){ PX.clearSelections(); clearHoldCinematic(); PX.followBall(true);   // drop the red circle from step 53
+      function(){ PX.clearSelections(); clearHoldCinematic(); PX.followGoal('blue');   // drop the red circle from step 53; keep the blue goal in view
         return (async function(){
           const def=intDef||blueFields()[0]; const passer=intPasser||whiteFields()[0];
           if(passer && typeof ball!=='undefined' && ball){ if(typeof moveBallTo==='function') moveBallTo(passer,'right'); }
@@ -12176,7 +12228,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     // then 6 passes take it 14 -> 3 at double real-time speed. Holds at 3.
     steps.push(animatedWatch('Blue now builds a new attack, working the ball patiently around the pool.',
       function(){ PX.followBall(true); PX.showShotClock(28); PX.tickShotClock(28, 14, 250);   // runs down to 14 while swimming over
-        return PX.setupWhiteHalf().then(()=>{ PX.centerOnBall(); PX.tickShotClock(14, 3, 540);   // 14 -> 3 spread across the 6 passes (keeps running, no freeze)
+        return PX.setupWhiteHalf().then(()=>{ PX.tickShotClock(14, 3, 540);   // 14 -> 3 spread across the 6 passes (keeps running, no freeze); setupWhiteHalf anchors the white goal
           return (async function(){
             const b=blueFields(); const seq=[]; for(let i=0;i<6;i++) seq.push(b[i%(b.length||1)]);
             for(const t of seq){ if(!t) continue;
@@ -12193,7 +12245,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     // 3.7 (Step 56) Blue finds no shot — CONFIRM, then watch the last 3 seconds run
     // out: SHOT CLOCK EXPIRED, then the whistle.
     steps.push(ackThenAnimate('This time the Blue team can’t find an opening to finish with a shot. Watch the shot clock — the last three seconds are about to run out.',
-      function(){ PX.followBall(true); PX.setShotClock(3); PX.tickShotClock(3, 0, 1000);
+      function(){ PX.followGoal('white'); PX.setShotClock(3); PX.tickShotClock(3, 0, 1000);
         return delay(3300).then(()=>{ PX.flash('SHOT CLOCK EXPIRED','whistle',1500);
           return delay(1100).then(()=>{ if(typeof PX.whistle==='function'){ try{ PX.whistle(); }catch(e){} } PX.flash('WHISTLE','whistle',1300); }); }); }));
 
@@ -12201,7 +12253,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     // to the ball, take possession and continue the play — which restarts the clock at
     // a new 28. (Exception: a player already ahead of the ball keeps breaking away.)
     steps.push(animatedWatch('The ball turns over to White. The player closest to the ball must swim to it, take possession and continue the play — which starts the shot clock again at a new 28 seconds. (If a player were already ahead of the ball, breaking toward the other goal, he would carry on instead of turning back for it.)',
-      function(){ PX.followBall(true);
+      function(){ PX.followGoal('white');
         // Possession flips to White — end the old (Blue-attacking) center duel so it
         // can't drag White #7 back behind the blue center after he takes the ball.
         PX.centerDuel(false); PX.setCenterDuel(null,null,null);
