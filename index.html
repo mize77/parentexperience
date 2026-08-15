@@ -12539,11 +12539,85 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     return (async function(){
       clearHoldCinematic();
       const bc = PX._exclPlayer; if(!bc || !bc.isConnected){ return; }
-      const corner = PX.reEntryCorner('blue');   // blue's re-entry area, upper-side near its own goal
+      const corner = PX.reEntryCorner('blue');   // blue's exclusion / re-entry area — the red-lined corner by its own goal
+      if(PX.blinkLines) PX.blinkLines('ejection');   // highlight the red exclusion corner he swims to
       await swim(bc, corner, 1700, 'h');
-      bc.style.transition='opacity .5s ease'; bc.style.opacity='0';
-      await delay(520); if(bc.isConnected) bc.remove();
-      PX._exclPlayer=null; PX.updateTeamLayering();
+      // He does NOT leave the field of view — he WAITS in the corner, vertical,
+      // facing the OTHER (white) goal, ready to swim back in when the 18 s are up.
+      bc.dataset.pose='v';
+      bc.dataset.rot=faceTo(corner.x, corner.y, WHITE_GOAL.x, WHITE_GOAL.y);
+      if(typeof place==='function') place(bc);
+      PX.updateTeamLayering();
+      // Keep PX._exclPlayer set: the following 6-on-5 set-up leaves him out of
+      // the five active Blue defenders.
+    })();
+  }
+
+  /* The 6-on-5 (man-up) SET-UP. Blends in the app's "6v5" field-zone overlay,
+     then swims all six White field players into the six zones (each smart-facing
+     the attacked blue goal) and the five remaining Blue defenders into a classic
+     4-2 man-down: three low defenders in the gaps of the four White attackers on
+     the front line (closer to the goal) and two high defenders blocking the two
+     White attackers farther out. The White player in field-zone 5 (the left
+     centre / hole set) holds the ball; the second centre (zone 6) is the open man
+     the parent finds next. Positions come straight from the app's
+     doubleCenterCircle geometry so the players sit inside the drawn wedges. */
+  function sixOnFiveSetupDemo(){
+    return (async function(){
+      stopFollow(); clearHoldCinematic(); if(PX.stopLineBlink) PX.stopLineBlink();
+      PX.centerDuel(false);
+      // Blend in the 6-on-5 zones (fade the overlay up before anyone swims).
+      if(typeof selectFieldZoneSet==='function'){
+        selectFieldZoneSet('6v5'); PX._zonesActive=true;
+        const zsvg=document.getElementById('fieldZonesSvg');
+        if(zsvg){ zsvg.style.transition='opacity 1s ease'; zsvg.style.opacity='0'; requestAnimationFrame(()=>requestAnimationFrame(()=>{ zsvg.style.opacity='1'; })); }
+      }
+      await delay(1050);   // let the zones blend in first
+
+      // doubleCenterCircle centroids around the blue goal (matches the app render:
+      // two inner centres over the -90..0 and 0..90 halves, four outer 45° wedges).
+      function z6v5(phiDeg, r){ const p=phiDeg*Math.PI/180; return { x:BLUE_GOAL.x + r*Math.cos(p), y:BLUE_GOAL.y + r*Math.sin(p) }; }
+      const Z = {
+        centerL: z6v5(-45, 2.8),   // #5 Left Centre  — hole set, holds the ball
+        centerR: z6v5( 45, 2.8),   // #6 Right Centre — the open man
+        z1:      z6v5(-67.5, 6.5), // #1 Left Wing   (front line)
+        z2:      z6v5(-22.5, 6.5), // #2 Left Shooter (far point)
+        z3:      z6v5( 22.5, 6.5), // #3 Right Shooter(far point)
+        z4:      z6v5( 67.5, 6.5)  // #4 Right Wing  (front line)
+      };
+
+      // --- White: six field players -> six zones, ball at field-zone 5.
+      const whites = whiteFields();
+      let carrier = (typeof ballCarrier!=='undefined' && ballCarrier && ballCarrier.dataset.team==='white') ? ballCarrier : whites[0];
+      const rest = whites.filter(w=>w!==carrier);
+      const openMan = rest[0];                 // second centre (#6) — the open man
+      const others  = rest.slice(1);           // four remaining -> wings + points
+      const wAssign = [
+        { el:carrier, at:Z.centerL }, { el:openMan, at:Z.centerR },
+        { el:others[0], at:Z.z1 }, { el:others[1], at:Z.z4 },   // front-line wings
+        { el:others[2], at:Z.z2 }, { el:others[3], at:Z.z3 }    // far points
+      ];
+      PX._l5ballCarrier = carrier; PX._l5openMan = openMan;
+
+      const anims=[];
+      wAssign.forEach(a=>{ if(!a.el) return;
+        anims.push(swimSettle(a.el, a.at, 3200, faceTo(a.at.x,a.at.y, BLUE_GOAL.x,BLUE_GOAL.y), 'v')); });   // smart: face the attacked goal
+
+      // --- Blue: the five remaining defenders in a 4-2 (3 low in the gaps, 2 high).
+      const blues = blueFields().filter(b=>b!==PX._exclPlayer).slice(0,5);
+      // Front line (closer to goal), already top->bottom by y: z1, centreL, centreR, z4.
+      const front = [Z.z1, Z.centerL, Z.centerR, Z.z4];
+      const goalSide = (pt, m)=>{ const dx=BLUE_GOAL.x-pt.x, dy=BLUE_GOAL.y-pt.y, dl=Math.hypot(dx,dy)||1; return { x:pt.x+dx/dl*m, y:pt.y+dy/dl*m }; };
+      const lowSpots=[];
+      for(let i=0;i<front.length-1;i++){ lowSpots.push(goalSide({ x:(front[i].x+front[i+1].x)/2, y:(front[i].y+front[i+1].y)/2 }, 0.8)); }   // in each gap, a touch goal-side
+      const highSpots=[Z.z2, Z.z3].map(t=>({ at:goalSide(t,1.3), look:t }));   // goal-side of each far point, facing him
+      lowSpots.forEach((s,i)=>{ const b=blues[i]; if(b) anims.push(swimSettle(b, s, 3200, faceTo(s.x,s.y, Z.centerL.x,Z.centerL.y), 'v')); });   // low D watch the ball
+      highSpots.forEach((h,i)=>{ const b=blues[3+i]; if(b) anims.push(swimSettle(b, h.at, 3200, faceTo(h.at.x,h.at.y, h.look.x,h.look.y), 'v')); });
+
+      await Promise.all(anims);
+      if(carrier && typeof moveBallTo==='function'){ if(typeof ballCarrier!=='undefined') ballCarrier=carrier; moveBallTo(carrier,'right'); }   // ball rests in zone 5
+      PX.updateTeamLayering();
+      PX.enterFrontCourt(); PX.followGoal('blue');
     })();
   }
 
@@ -12552,7 +12626,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     let openWhite=null;
 
     // 5.1 — a blue defender holds/sinks the White centre (no ball) -> EXCLUSION.
-    steps.push(animatedWatch('Remember the key rule: holding, sinking or pulling back an opponent who is NOT holding the ball is a serious foul. Here a Blue defender does exactly that to the White centre — the referee calls an EXCLUSION.',
+    steps.push(animatedWatch('Remember the key rule: holding, sinking or pulling back an opponent who is NOT in possession of the ball is a serious foul. Here a Blue defender does exactly that to the White centre — the referee calls an EXCLUSION.',
       function(){
         PX.field.setPhase('lines'); PX.clearActors(); PX.ensureOffenseBoard();
         PX.centerDuel(false); PX.enterFrontCourt(); PX.followGoal('blue');
@@ -12564,16 +12638,17 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     steps.push(animatedWatch('An exclusion is not a free throw — the guilty player must leave the water at his team’s re-entry area. He stays out for 18 seconds, or sooner if his team wins the ball back or a goal is scored.',
       function(){ return excludedLeavesDemo(); }));
 
-    // 5.3 — the numerical difference: 6-on-5 / 5-on-6.
-    steps.push(watch('Now White has six field players against Blue’s five. The very same situation has two names: for the attacking White it is a 6-on-5 — a “man-up” or power play; for the defending Blue it is a 5-on-6.',
-      ()=>{ PX.flash('6-ON-5','good',1800); }));
+    // 5.3 — the numerical difference: 6-on-5 / 5-on-6. White sets up its power
+    // play in the 6-on-5 zones; Blue drops into the 4-2 man-down defence.
+    steps.push(animatedWatch('Now White has six field players against Blue’s five. The very same situation has two names: for the attacking White it is a 6-on-5 — a “man-up” or power play; for the defending Blue it is a 5-on-6. White spreads into the power-play zones while Blue sets a 4-2 defence.',
+      function(){ return sixOnFiveSetupDemo().then(()=>{ PX.flash('6-ON-5','good',1800); }); }));
 
     // 5.4 YOU TRY — find the open player (the unmarked White centre).
     steps.push({
       instruction:'With one fewer defender, one White attacker is unmarked. Find the open player near the goal and tap him.',
       bannerSide:'top', skipDimPhase:true, highlight:null,
       onEnter:function(){ PX._l5open=false; clearHoldCinematic();
-        openWhite = whiteCenter() || whiteFields()[0];
+        openWhite = PX._l5openMan || whiteCenter() || whiteFields()[0];   // the second centre (zone 6), left unmarked by the 4-2
         if(openWhite) spotlightCircle(+openWhite.dataset.x, +openWhite.dataset.y, 2.2, false);   // a soft hint around the open area
         PX.tap.arm({
           test:function(hit){ return !!(hit.player && openWhite && hit.player===openWhite); },
@@ -12595,7 +12670,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
 
     // 5.5 YOU TRY — the man-up shot (tap a corner + SHOOT -> goal; retry until it scores).
     function l5ArmShot(){
-      const w=openWhite||whiteCenter()||currentWhiteShooter();
+      const w=openWhite||PX._l5openMan||whiteCenter()||currentWhiteShooter();
       if(w){ if(typeof ballCarrier!=='undefined') ballCarrier=w; if(typeof moveBallTo==='function') moveBallTo(w,'right'); }
       PX.shoot.begin({ side:'left', subtleZone:true, cornerScore:true, ghost:{x:BLUE_GOAL.x, y:13.35}, onResult:function(res){
         if(res && res.result==='GOAL'){ PX.flash('GOAL! The power play pays off','goal'); setTimeout(()=>{ PX._l5goal=true; }, 1200); }
@@ -12842,6 +12917,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     if(PX.shoot&&PX.shoot.cancel){ try{ PX.shoot.cancel(); }catch(e){} }
     if(PX.tap&&PX.tap.disarm){ try{ PX.tap.disarm(); }catch(e){} }
     PX._zonesActive=false; PX._holdBox=false;   // clear any suppressed-box state from a mid-animation jump
+    try{ if(typeof selectFieldZoneSet==='function') selectFieldZoneSet('none'); const _zsvg=document.getElementById('fieldZonesSvg'); if(_zsvg){ _zsvg.style.transition='none'; _zsvg.style.opacity=''; } }catch(e){}   // drop any field-zone overlay (e.g. L5 6-on-5) so it can't linger into another lesson
     // Lessons 2 & 3 both open from the offense/defense board on the field — build it
     // fresh so the players are correctly set up (a stale 12-player board would have
     // made ensureOffenseBoard's guard no-op and left them where the last step left them).
