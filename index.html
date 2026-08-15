@@ -11550,16 +11550,27 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       if(!atk){ res(); return; }
       const def=PX._pressDef||nearestBlue(atk);
       if(!def){ res(); return; }
-      // keep the same pair together; the defender is in touch on the white player's left
-      def.dataset.x=(+atk.dataset.x)-0.85; def.dataset.y=+atk.dataset.y; if(typeof place==='function') place(def);
-      // the white player TURNS toward the blue defender so the blue hand can also touch the ball
-      atk.dataset.pose='v'; atk.dataset.rot=faceTo(+atk.dataset.x,+atk.dataset.y, +def.dataset.x,+def.dataset.y);
+      // White holds the ball in the right hand, turned toward the challenging defender.
+      atk.dataset.pose='v';
+      def.dataset.x=(+atk.dataset.x)-0.7; def.dataset.y=+atk.dataset.y;
+      atk.dataset.rot=faceTo(+atk.dataset.x,+atk.dataset.y, +def.dataset.x,+def.dataset.y);
       if(typeof place==='function') place(atk);
       if(typeof ballCarrier!=='undefined') ballCarrier=atk;                 // stays in possession — play goes on
       if(typeof moveBallTo==='function') moveBallTo(atk,'right');           // ball in the RIGHT hand
-      const ax=+atk.dataset.x, ay=+atk.dataset.y;
-      spotlightCircle(ax, ay, 2.3, false);                                 // highlight the hands-on-ball situation — NO whistle, NO headlines
-      setTimeout(res, 1400);
+      // Bring the defender RIGHT UP to the ball so his hand is ON it — as close as
+      // needed to touch it — then press the ball a short way under.
+      const bx=+ball.dataset.x, by=+ball.dataset.y, ax=+atk.dataset.x, ay=+atk.dataset.y;
+      const ux=bx-ax, uy=by-ay, ul=Math.hypot(ux,uy)||1;
+      def.dataset.pose='v';
+      def.dataset.x = bx + (ux/ul)*0.22; def.dataset.y = by + (uy/ul)*0.22;   // the defender's (left) hand at the ball
+      def.dataset.rot = faceTo(+def.dataset.x,+def.dataset.y, ax,ay);
+      if(typeof place==='function') place(def);
+      if(typeof PX.updateTeamLayering==='function') PX.updateTeamLayering();
+      tween((x,y)=>{ ball.dataset.x=x; ball.dataset.y=y; if(typeof placeBall==='function') placeBall(); },   // he pushes the white player's hand + ball down (under)
+        {x:bx,y:by}, {x:bx+(ux/ul)*0.3, y:by+(uy/ul)*0.3}, 550, function(){
+          spotlightCircle(ax, ay, 2.2, false);                             // highlight the hands-on-ball situation
+          setTimeout(res, 900);
+        });
     });
   }
   // 2A.4 — the carrier releases the ball (ball off the hand, toward +x / own goal).
@@ -11617,20 +11628,18 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       const atk=PX._foulAtk||currentWhiteShooter(); if(!atk) return;
       const def=PX._foulDef||nearestBlue(atk);
       if(typeof ballCarrier!=='undefined') ballCarrier=atk;
-      // White shields: side-on (right arm toward +x), ball in the RIGHT hand — away
-      // from the goal-side defender.
-      atk.dataset.pose='v'; atk.dataset.rot=0; if(typeof place==='function') place(atk);
+      // Continue EXACTLY from the possession recap: White faces the goal with the ball
+      // in his right hand, and the Blue defender STAYS on him (same front / goal-side
+      // spot). Placed, not swum — so nothing moves backwards in continuous play.
+      atk.dataset.pose='v'; atk.dataset.rot=faceTo(+atk.dataset.x,+atk.dataset.y, BLUE_GOAL.x,BLUE_GOAL.y); if(typeof place==='function') place(atk);
       if(typeof moveBallTo==='function') moveBallTo(atk,'right');
-      await delay(450);
-      // Blue attacks from the FRONT (goal side = -x), pressing the non-ball side.
-      if(def){ def.dataset.pose='v';
-        await swim(def, { x:(+atk.dataset.x)-0.85, y:+atk.dataset.y }, 950);
-        def.dataset.rot=faceTo(+def.dataset.x,+def.dataset.y, +atk.dataset.x,+atk.dataset.y); if(typeof place==='function') place(def); }
-      await delay(350);
-      // White releases the ball ~0.5 m to the OPPOSITE (safe) side, away from the defender.
+      if(def){ def.dataset.pose='v'; def.dataset.x=(+atk.dataset.x)-0.62; def.dataset.y=(+atk.dataset.y)+0.12; def.dataset.rot=faceTo(+def.dataset.x,+def.dataset.y, +atk.dataset.x,+atk.dataset.y); if(typeof place==='function') place(def); }
+      if(typeof PX.updateTeamLayering==='function') PX.updateTeamLayering();
+      await delay(650);
+      // NOW White releases the ball a short way to a safe spot (away from the defender).
+      // The defender is still holding a player who no longer has the ball -> foul.
       if(typeof ballCarrier!=='undefined') ballCarrier=null;
-      await moveBallXY((+atk.dataset.x)+0.9, +atk.dataset.y, 420);
-      // the referee whistles an ordinary foul -> free throw for the attacking team.
+      await moveBallXY((+atk.dataset.x)+0.7, (+atk.dataset.y)-0.3, 450);
       spotlightCircle(+atk.dataset.x, +atk.dataset.y, 2.2, false);
       if(typeof PX.whistle==='function'){ try{ PX.whistle(); }catch(e){} }
       await delay(800);
@@ -11644,15 +11653,16 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       // Blink ONLY the attacked (blue, left) goal's 2-meter box — not both goals.
       if(PX.stopLineBlink) PX.stopLineBlink();
       const m2=document.querySelector('#pxMark2mL'); if(m2) m2.classList.add('pxBlink');
+      // Leave the ball carrier (White #5) exactly where he is — just make sure he holds
+      // the ball, so he is the "ball" reference. (No teleporting him to a new spot.)
       const carrier=PX._foulAtk||currentWhiteShooter();
-      // the ball carrier sits clearly OUTSIDE the 2m box (x=7), centred, holding the ball
-      if(carrier){ carrier.dataset.pose='v'; carrier.dataset.x=7.0; carrier.dataset.y=CY; carrier.dataset.rot=faceTo(7.0,CY, BLUE_GOAL.x,BLUE_GOAL.y); if(typeof place==='function') place(carrier); if(typeof ballCarrier!=='undefined') ballCarrier=carrier; if(typeof moveBallTo==='function') moveBallTo(carrier,'left'); }
-      // an off-ball attacker slips INTO the 2m box (x≈3.4), ahead of the ball,
-      // on the upper side so he never overlaps the keeper at the goal centre.
-      const off = whiteFields().filter(w=>w!==carrier).sort((a,b)=>dist2(a,{x:5.6,y:CY-2.4})-dist2(b,{x:5.6,y:CY-2.4}))[0];
-      if(off){ off.dataset.pose='v'; off.dataset.x=5.6; off.dataset.y=CY-2.4; if(typeof place==='function') place(off);
-        await swimSettle(off, {x:3.4, y:CY-2.4}, 1300, faceTo(3.4,CY-2.4, BLUE_GOAL.x,BLUE_GOAL.y), 'v');   // into the 2m box, AHEAD of the ball line
-        spotlightCircle(3.4, CY-2.4, 1.8, false);
+      if(carrier){ if(typeof ballCarrier!=='undefined') ballCarrier=carrier; if(typeof moveBallTo==='function') moveBallTo(carrier,'right'); }
+      // A DIFFERENT, off-ball attacker slips FROM HIS OWN SPOT into the 2m box (x≈3.4),
+      // ahead of the ball — that is the offside.
+      const off = whiteFields().filter(w=>w!==carrier).sort((a,b)=>dist2(a,{x:4.5,y:CY-2})-dist2(b,{x:4.5,y:CY-2}))[0];
+      if(off){ const oy=+off.dataset.y; off.dataset.pose='v';
+        await swimSettle(off, {x:3.4, y:oy}, 1300, faceTo(3.4,oy, BLUE_GOAL.x,BLUE_GOAL.y), 'v');   // from his own position INTO the 2m box, ahead of the ball
+        spotlightCircle(3.4, oy, 1.8, false);
         if(typeof PX.whistle==='function'){ try{ PX.whistle(); }catch(e){} }
       }
       await delay(900);
@@ -12480,7 +12490,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       function(){ return freeThrowDemo(); }));
 
     // 4.7 — advantage / play on.
-    steps.push(watch('The referee doesn’t whistle every foul. If a team is fouled but already has a clear chance, stopping play would only waste it — so the referee lets play continue. This is called advantage.',
+    steps.push(watch('The referee doesn’t have to blow the whistle for every foul. If the attacking team is fouled but still has the ball and a good chance to score, stopping for the free throw would only take that chance away. So the referee lets play go on instead — this is called playing the advantage.',
       ()=>{ clearHoldCinematic(); clearL4Overlays(); }));   // no animation — just the explanation, cleaned of the offside overlays
 
     // 4.8 — wrap-up: LESSON 4 COMPLETE headline FIRST, then the recap box (wider).
