@@ -12539,8 +12539,11 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     return (async function(){
       clearHoldCinematic();
       const bc = PX._exclPlayer; if(!bc || !bc.isConnected){ return; }
-      const corner = PX.reEntryCorner('blue');   // blue's exclusion / re-entry area — the red-lined corner by its own goal
-      if(PX.blinkLines) PX.blinkLines('ejection');   // highlight the red exclusion corner he swims to
+      // The RED exclusion marker sits on the 0 m goal line (x = 2), at the bench-side
+      // corner (drawn as "M2 2 V4"). Send him to THAT corner — not the 2 m re-entry
+      // spot — so he waits right on the red line at the goal-line corner.
+      const corner = { x: BLUE_GOAL.x + 0.5, y: 2.7 };
+      if(PX.blinkLines) PX.blinkLines('ejection');   // highlight the red exclusion marker he swims to
       await swim(bc, corner, 1700, 'h');
       // He does NOT leave the field of view — he WAITS in the corner, vertical,
       // facing the OTHER (white) goal, ready to swim back in when the 18 s are up.
@@ -12626,7 +12629,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     let openWhite=null;
 
     // 5.1 — a blue defender holds/sinks the White centre (no ball) -> EXCLUSION.
-    steps.push(animatedWatch('Remember the key rule: holding, sinking or pulling back an opponent who is NOT in possession of the ball is a serious foul. Here a Blue defender does exactly that to the White centre — the referee calls an EXCLUSION.',
+    steps.push(animatedWatch('Remember the key rule: holding, sinking or pulling back an opponent who is NOT in possession of the ball is a serious foul. Here a Blue defender does exactly that to the White center — the referee calls an EXCLUSION.',
       function(){
         PX.field.setPhase('lines'); PX.clearActors(); PX.ensureOffenseBoard();
         PX.centerDuel(false); PX.enterFrontCourt(); PX.followGoal('blue');
@@ -12640,7 +12643,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
 
     // 5.3 — the numerical difference: 6-on-5 / 5-on-6. White sets up its power
     // play in the 6-on-5 zones; Blue drops into the 4-2 man-down defence.
-    steps.push(animatedWatch('Now White has six field players against Blue’s five. The very same situation has two names: for the attacking White it is a 6-on-5 — a “man-up” or power play; for the defending Blue it is a 5-on-6. White spreads into the power-play zones while Blue sets a 4-2 defence.',
+    steps.push(animatedWatch('Now White has six field players against Blue’s five. The very same situation has two names: for the attacking White it is a 6-on-5 — a “man-up” or power play; for the defending Blue it is a 5-on-6. White spreads into the power-play zones while Blue sets a 4-2 defense.',
       function(){ return sixOnFiveSetupDemo().then(()=>{ PX.flash('6-ON-5','good',1800); }); }));
 
     // 5.4 YOU TRY — find the open player (the unmarked White centre).
