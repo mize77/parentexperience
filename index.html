@@ -11599,7 +11599,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       const def=PX._foulDef||nearestBlue(atk);
       if(typeof ballCarrier!=='undefined') ballCarrier=atk;
       atk.dataset.pose='v'; atk.dataset.rot=faceTo(+atk.dataset.x,+atk.dataset.y, BLUE_GOAL.x,BLUE_GOAL.y); if(typeof place==='function') place(atk);
-      if(typeof moveBallTo==='function') moveBallTo(atk,'left');
+      if(typeof moveBallTo==='function') moveBallTo(atk,'right');   // ball in the RIGHT (dominant) hand
       if(def){ def.dataset.pose='v';
         await swim(def, { x:(+atk.dataset.x)-0.62, y:(+atk.dataset.y)+0.12 }, 950);   // attack from the FRONT (goal side) — the defender is already goal-side, so it presses forward and never swims THROUGH to the back
         def.dataset.rot=faceTo(+def.dataset.x,+def.dataset.y, +atk.dataset.x,+atk.dataset.y); if(typeof place==='function') place(def); }
@@ -12490,6 +12490,121 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     return steps;
   };
 
+  /* =====================================================================
+     LESSON 5 — EXCLUSIONS & THE POWER PLAY (6-on-5)
+     A blue defender holds/sinks the WHITE centre (who has NO ball) -> exclusion;
+     the excluded blue player leaves for 18s (or sooner on a goal / possession
+     change); White is a player up (6-on-5) and converts. White attacks the LEFT
+     (blue) goal. PX._exclPlayer holds the excluded blue player.
+     ===================================================================== */
+  function exclusionFoulDemo(){
+    return (async function(){
+      stopFollow(); clearHoldCinematic(); clearL4Overlays();
+      const wc = whiteCenter() || whiteFields()[0];
+      const bc = blueCenter() || (wc?nearestBlue(wc):null);
+      if(!wc || !bc) return;
+      PX._exclPlayer = bc;   // the blue player who will be excluded
+      // the ball is with a PERIMETER white — the centre (the victim) has no ball
+      const perim = whiteFields().filter(w=>w!==wc);
+      const carrier = (typeof ballCarrier!=='undefined' && ballCarrier && ballCarrier.dataset.team==='white' && ballCarrier!==wc) ? ballCarrier : perim[0];
+      if(carrier){ if(typeof ballCarrier!=='undefined') ballCarrier=carrier; if(typeof moveBallTo==='function') moveBallTo(carrier,'right'); }
+      wc.dataset.pose='v'; wc.dataset.rot=faceTo(+wc.dataset.x,+wc.dataset.y, BLUE_GOAL.x,BLUE_GOAL.y); if(typeof place==='function') place(wc);
+      const wx=+wc.dataset.x, wy=+wc.dataset.y;
+      // the blue centre defender closes from the goal side and holds/sinks the centre
+      bc.dataset.pose='v';
+      await swim(bc, { x:wx-0.35, y:wy+0.15 }, 1000);   // overlaps the centre — holding, no play on a ball he doesn't have
+      bc.dataset.rot=faceTo(+bc.dataset.x,+bc.dataset.y, wx,wy); if(typeof place==='function') place(bc);
+      PX.updateTeamLayering();
+      if(typeof PX.whistle==='function'){ try{ PX.whistle(); }catch(e){} }   // one whistle here (2A already noted exclusions get 2–3)
+      spotlightCircle(wx, wy, 2.4, false);
+      await delay(900);
+    })();
+  }
+  function excludedLeavesDemo(){
+    return (async function(){
+      clearHoldCinematic();
+      const bc = PX._exclPlayer; if(!bc || !bc.isConnected){ return; }
+      const corner = PX.reEntryCorner('blue');   // blue's re-entry area, upper-side near its own goal
+      await swim(bc, corner, 1700, 'h');
+      bc.style.transition='opacity .5s ease'; bc.style.opacity='0';
+      await delay(520); if(bc.isConnected) bc.remove();
+      PX._exclPlayer=null; PX.updateTeamLayering();
+    })();
+  }
+
+  PX.buildLesson5Steps = function(){
+    const steps=[];
+    let openWhite=null;
+
+    // 5.1 — a blue defender holds/sinks the White centre (no ball) -> EXCLUSION.
+    steps.push(animatedWatch('Remember the key rule: holding, sinking or pulling back an opponent who is NOT holding the ball is a serious foul. Here a Blue defender does exactly that to the White centre — the referee calls an EXCLUSION.',
+      function(){
+        PX.field.setPhase('lines'); PX.clearActors(); PX.ensureOffenseBoard();
+        PX.centerDuel(false); PX.enterFrontCourt(); PX.followGoal('blue');
+        if(!document.getElementById('pxRefTop')) PX.showReferees(); PX.startRefTracking();
+        return exclusionFoulDemo().then(()=>{ PX._leadFlash('EXCLUSION','whistle'); });
+      }));
+
+    // 5.2 — the excluded player leaves the water.
+    steps.push(animatedWatch('An exclusion is not a free throw — the guilty player must leave the water at his team’s re-entry area. He stays out for 18 seconds, or sooner if his team wins the ball back or a goal is scored.',
+      function(){ return excludedLeavesDemo(); }));
+
+    // 5.3 — the numerical difference: 6-on-5 / 5-on-6.
+    steps.push(watch('Now White has six field players against Blue’s five. The very same situation has two names: for the attacking White it is a 6-on-5 — a “man-up” or power play; for the defending Blue it is a 5-on-6.',
+      ()=>{ PX.flash('6-ON-5','good',1800); }));
+
+    // 5.4 YOU TRY — find the open player (the unmarked White centre).
+    steps.push({
+      instruction:'With one fewer defender, one White attacker is unmarked. Find the open player near the goal and tap him.',
+      bannerSide:'top', skipDimPhase:true, highlight:null,
+      onEnter:function(){ PX._l5open=false; clearHoldCinematic();
+        openWhite = whiteCenter() || whiteFields()[0];
+        if(openWhite) spotlightCircle(+openWhite.dataset.x, +openWhite.dataset.y, 2.2, false);   // a soft hint around the open area
+        PX.tap.arm({
+          test:function(hit){ return !!(hit.player && openWhite && hit.player===openWhite); },
+          onCorrect:function(hit){ PX.tap.disarm(); clearHoldCinematic();
+            (typeof passBallTo==='function'? passBallTo(openWhite,520) : Promise.resolve()).then(function(){
+              if(typeof ballCarrier!=='undefined') ballCarrier=openWhite; if(typeof moveBallTo==='function') moveBallTo(openWhite,'right'); PX.updateTeamLayering();
+              PX.flash('Correct — the open man is free in front of the goal','good'); setTimeout(()=>{ PX._l5open=true; }, 1800);
+            });
+          },
+          onWrong:function(hit){ if(hit.player && hit.player.dataset.team==='white') PX.flash('That one is still marked — find the free player','',1200);
+            else if(hit.player) PX.flash('Tap the open WHITE attacker','',1200); }
+        });
+      },
+      validate:{ type:'custom', fn:()=> PX._l5open===true },
+      autoComplete:function(){ PX.tap.disarm(); clearHoldCinematic(); const w=openWhite||whiteCenter();
+        if(w){ if(typeof passBallTo==='function') passBallTo(w,420); if(typeof ballCarrier!=='undefined') ballCarrier=w; if(typeof moveBallTo==='function') moveBallTo(w,'right'); }
+        PX.flash('Correct — the open man is free in front of the goal','good'); setTimeout(()=>{ PX._l5open=true; }, 1400); }
+    });
+
+    // 5.5 YOU TRY — the man-up shot (tap a corner + SHOOT -> goal; retry until it scores).
+    function l5ArmShot(){
+      const w=openWhite||whiteCenter()||currentWhiteShooter();
+      if(w){ if(typeof ballCarrier!=='undefined') ballCarrier=w; if(typeof moveBallTo==='function') moveBallTo(w,'right'); }
+      PX.shoot.begin({ side:'left', subtleZone:true, cornerScore:true, ghost:{x:BLUE_GOAL.x, y:13.35}, onResult:function(res){
+        if(res && res.result==='GOAL'){ PX.flash('GOAL! The power play pays off','goal'); setTimeout(()=>{ PX._l5goal=true; }, 1200); }
+        else { PX.flash('Saved — aim right next to a post, out of reach','',1600); setTimeout(l5ArmShot, 1800); }
+      }});
+    }
+    steps.push({
+      instruction:'The open player has a clear look. Tap a spot in the goal — close to a post, out of the keeper’s reach — then press SHOOT.',
+      bannerSide:'top', skipDimPhase:true, highlight:null,
+      onEnter:function(){ PX._l5goal=false; clearHoldCinematic();
+        PX.enterFrontCourt(); PX.followGoal('blue');
+        l5ArmShot();
+      },
+      validate:{ type:'custom', fn:()=> PX._l5goal===true },
+      autoComplete:function(){ if(PX.shoot&&PX.shoot.cancel) PX.shoot.cancel(); PX.flash('GOAL! The power play pays off','goal'); setTimeout(()=>{ PX._l5goal=true; }, 1000); }
+    });
+
+    // 5.6 wrap-up.
+    steps.push(watchLeadFlash('UNDERSTAND\n• Holding, sinking or pulling back a player WITHOUT the ball is an exclusion.\n• The excluded player leaves the water for 18 seconds — or sooner on a goal or a change of possession.\n• His team plays a man down: 6-on-5 for the attackers, 5-on-6 for the defenders.\n• A player up, the attack moves the ball to find the open man.\n• The power play is a big chance to score.',
+      'LESSON 5 COMPLETE', 'good', ()=>{ PX.followBall(false); const bn=document.getElementById('tutorialBanner'); if(bn) bn.classList.add('pxWide'); }));
+
+    return steps;
+  };
+
   /* --------------------------------------- swim-off choreography (promise) */
   async function runSwimOff(){
     PX.centerDuel(false); PX.setCenterDuel(null,null,null);   // no offense/defense duel during the swim-off
@@ -12745,7 +12860,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     else PX.flash('That’s the last lesson so far','',2000);
   };
   // Lesson names for the jump-to-lesson picker (index matches _lessonStarts).
-  PX._lessonTitles = ['Lesson 1 — The Pool & the Players','Lesson 2 — How the Game Works','Lesson 3 — Possession & the Shot Clock','Lesson 4 — Ordinary Fouls'];
+  PX._lessonTitles = ['Lesson 1 — The Pool & the Players','Lesson 2 — How the Game Works','Lesson 3 — Possession & the Shot Clock','Lesson 4 — Ordinary Fouls','Lesson 5 — Exclusions & the Power Play'];
   // Which lesson the current step belongs to (0-based).
   PX.currentLesson = function(){
     const starts=PX._lessonStarts||[0];
@@ -12829,9 +12944,9 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     PX._viewBias=0;
     PX._swimDone=false; PX._setupDone=false; PX._gkTapped=false; PX._zonesActive=false; PX._holdBox=false; PX._snapshots={};
     PX.hideShotClock(); PX.followBall(false); PX.centerDuel(false); PX.setCenterDuel(null,null,null);
-    const l1=PX.buildLesson1Steps(), l2=PX.buildLesson2Steps(), l3=PX.buildLesson3Steps(), l4=PX.buildLesson4Steps();
-    PX._lessonStarts=[0, l1.length, l1.length+l2.length, l1.length+l2.length+l3.length];   // Lesson 2 / 3 / 4 start offsets
-    const allSteps = wrapBannerReset([].concat(l1, l2, l3, l4));
+    const l1=PX.buildLesson1Steps(), l2=PX.buildLesson2Steps(), l3=PX.buildLesson3Steps(), l4=PX.buildLesson4Steps(), l5=PX.buildLesson5Steps();
+    PX._lessonStarts=[0, l1.length, l1.length+l2.length, l1.length+l2.length+l3.length, l1.length+l2.length+l3.length+l4.length];   // L2 / L3 / L4 / L5 offsets
+    const allSteps = wrapBannerReset([].concat(l1, l2, l3, l4, l5));
     if(typeof startTutorial==='function'){
       startTutorial(allSteps, { onComplete:function(){ PX.hideNav(); PX.showWpEnd('complete'); } });
     }
