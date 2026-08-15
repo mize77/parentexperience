@@ -11032,7 +11032,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       ()=>{ PX.field.setPhase('lines'); PX.blinkLines('red'); }));
     steps.push(watch('The yellow line is the 5-meter line. It sets the distance for a penalty shot.',
       ()=>{ PX.field.setPhase('lines'); PX.blinkLines('yellow'); }));
-    steps.push(watch('The green line is the 6-meter line. After receiving a free throw AT the 6-meter line or farther out, a player may shoot directly at the goal. Closer in — inside the 6-meter zone — the ball must first be brought back into play (tossed slightly up or passed to a team-mate) before a shot is allowed.',
+    steps.push(watch('The green line is the 6-meter line. After receiving a free throw AT the 6-meter line or farther out, a player may shoot directly on the goal. Closer in — inside the 6-meter zone — the ball must first be brought back into play (tossed slightly up or passed to a team-mate) before a shot is allowed.',
       ()=>{ PX.field.setPhase('lines'); PX.blinkLines('green'); }));
     steps.push(watch('And the white line down the middle separates the two halves of the field.',
       ()=>{ PX.field.setPhase('lines'); PX.blinkLines('white'); }));
@@ -11576,7 +11576,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
      ORDINARY FOULS. Correct rules: a player HOLDING the ball may be held, sunk
      or pulled — that is legal (only genuinely violent play is punished). Ordinary
      fouls are the minor, technical infringements: ball-under, dunking a player
-     who has LET GO of the ball, and 2-metre offside — each gives the other team
+     who has LET GO of the ball, and 2-meter offside — each gives the other team
      a free throw and nobody leaves the pool. White attacks the LEFT (blue) goal
      (forward = -x). PX._foulAtk / PX._foulDef hold the pair reused across steps. */
   function pickFoulPair(){
@@ -11636,21 +11636,18 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       await delay(800);
     })();
   }
-  // 4.5 — 2-metre offside: an attacker WITHOUT the ball slips into the 2m box
+  // 4.5 — 2-meter offside: an attacker WITHOUT the ball slips into the 2m box
   // (blinking red) ahead of the line of the ball.
   function offsideDemo(){
     return (async function(){
       stopFollow(); clearL4Overlays(); clearHoldCinematic();
-      if(PX.blinkLines) PX.blinkLines('red');   // the 2-metre box in front of the blue goal
+      // Blink ONLY the attacked (blue, left) goal's 2-meter box — not both goals.
+      if(PX.stopLineBlink) PX.stopLineBlink();
+      const m2=document.querySelector('#pxMark2mL'); if(m2) m2.classList.add('pxBlink');
       const carrier=PX._foulAtk||currentWhiteShooter();
       // the ball carrier sits clearly OUTSIDE the 2m box (x=7), centred, holding the ball
       if(carrier){ carrier.dataset.pose='v'; carrier.dataset.x=7.0; carrier.dataset.y=CY; carrier.dataset.rot=faceTo(7.0,CY, BLUE_GOAL.x,BLUE_GOAL.y); if(typeof place==='function') place(carrier); if(typeof ballCarrier!=='undefined') ballCarrier=carrier; if(typeof moveBallTo==='function') moveBallTo(carrier,'left'); }
-      const bx=(typeof ball!=='undefined'&&ball)?+ball.dataset.x:7.0;
-      // the "line of the ball": a dashed line across the field at the ball's depth
-      try{ const bd=boardEl(); if(bd){ const layer=fcSvgLayer(201); layer.id='pxBallLine';
-        layer.innerHTML=fcWrap('<line x1="'+bx+'" y1="5.5" x2="'+bx+'" y2="18.5" stroke="#ffd23f" stroke-width="0.16" stroke-dasharray="0.55 0.4"/>');
-        bd.appendChild(layer); requestAnimationFrame(()=>{ layer.style.opacity='1'; }); } }catch(e){}
-      // an off-ball attacker slips INTO the 2m box (x≈3.4), ahead of the ball line,
+      // an off-ball attacker slips INTO the 2m box (x≈3.4), ahead of the ball,
       // on the upper side so he never overlaps the keeper at the goal centre.
       const off = whiteFields().filter(w=>w!==carrier).sort((a,b)=>dist2(a,{x:5.6,y:CY-2.4})-dist2(b,{x:5.6,y:CY-2.4}))[0];
       if(off){ off.dataset.pose='v'; off.dataset.x=5.6; off.dataset.y=CY-2.4; if(typeof place==='function') place(off);
@@ -11662,7 +11659,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     })();
   }
   // 4.6 — the free throw: three ways to take it (toss up / pass / direct shot from
-  // outside the 6-metre line, which blinks green).
+  // outside the 6-meter line, which blinks green).
   function freeThrowDemo(){
     return (async function(){
       stopFollow(); clearL4Overlays(); clearHoldCinematic();
@@ -12415,14 +12412,14 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
         PX.centerDuel(false); PX.setCenterDuel(null,null,null);
         return (async function(){
           const bx=(typeof ball!=='undefined'&&ball)?+ball.dataset.x:MID_X, by=(typeof ball!=='undefined'&&ball)?+ball.dataset.y:CY;
-          // White #7 swims to the ball, takes possession, and carries it one metre
+          // White #7 swims to the ball, takes possession, and carries it one meter
           // forward toward the attacking goal — no pass in this animation.
           const w=whiteByCap(7) || whiteFields().sort((a,b)=>Math.hypot(+a.dataset.x-bx,+a.dataset.y-by)-Math.hypot(+b.dataset.x-bx,+b.dataset.y-by))[0] || whiteFields()[0];
           if(w){ await swimSettle(w, {x:bx,y:by}, 900, faceTo(bx,by, BLUE_GOAL.x,BLUE_GOAL.y), 'v');   // swim to the ball, settle vertical
             if(typeof ballCarrier!=='undefined') ballCarrier=w; PX.updateTeamLayering();   // White now attacks -> Blue defends on top
             const opp=nearestBlue(w); const hand=(opp && (+opp.dataset.y) < (+w.dataset.y)) ? 'right' : 'left';   // ball on the arm away from the opponent
             if(typeof moveBallTo==='function') moveBallTo(w, hand);
-            await swim(w, { x:(+w.dataset.x)-1.0, y:+w.dataset.y }, 700);   // carry it one metre forward (no pass)
+            await swim(w, { x:(+w.dataset.x)-1.0, y:+w.dataset.y }, 700);   // carry it one meter forward (no pass)
             if(typeof moveBallTo==='function') moveBallTo(w, hand); }
           PX.showShotClock(28); PX.flash('WHITE IN POSSESSION','good'); await delay(300);
         })();
@@ -12444,7 +12441,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
      LESSON 4 — ORDINARY FOULS
      Correct rules. The possession principle (attacking the ball-carrier is
      legal) is RE-ANCHORED, then the three common ordinary fouls are shown:
-     ball-under, dunking a player who has released the ball, and 2-metre
+     ball-under, dunking a player who has released the ball, and 2-meter
      offside. Then the free throw (three options) and advantage.
      ===================================================================== */
   PX.buildLesson4Steps = function(){
@@ -12474,20 +12471,20 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     steps.push(animatedWatch('Another common ordinary foul is the BALL-UNDER: a player taking the ball under the surface while being challenged for it. The player touching the ball as it goes under commits it — a free throw to the other team.',
       function(){ return ballUnderDemo().then(()=>{ if(typeof PX.whistle==='function'){ try{ PX.whistle(); }catch(e){} } }); }));
 
-    // 4.5 — ordinary foul #3: 2-metre offside.
-    steps.push(animatedWatch('The third is OFFSIDE at the 2-metre line — the red box in front of the goal. An attacker WITHOUT the ball may not slip into that box ahead of the ball (the yellow line marks where the ball is). How far he can go depends on where the ball is; going in ahead of it is a foul.',
+    // 4.5 — ordinary foul #3: 2-meter offside.
+    steps.push(animatedWatch('The third is OFFSIDE at the 2-meter line — the red box in front of the goal. An attacker WITHOUT the ball may not slip into that box ahead of the ball. How far he can go depends on where the ball is; going in ahead of it is a foul.',
       function(){ return offsideDemo(); }));
 
     // 4.6 — the free throw: three options.
-    steps.push(animatedWatch('After an ordinary foul the fouled team takes a free throw. They have three choices: toss the ball up to put it back in play, pass it straight to a team-mate, or — when the ball is outside the 6-metre line (green) — shoot directly at the goal, no matter where the foul happened.',
+    steps.push(animatedWatch('After an ordinary foul the fouled team takes a free throw. They have three choices: toss the ball up to put it back in play, pass it straight to a team-mate, or — when the ball is outside the 6-meter line (green) — shoot directly on the goal, no matter where the foul happened.',
       function(){ return freeThrowDemo(); }));
 
     // 4.7 — advantage / play on.
-    steps.push(animatedWatch('The referee doesn’t whistle every foul. If a team is fouled but already has a clear chance, stopping play would only waste it — so the referee lets play continue. This is called advantage.',
-      function(){ return advantageDemo().then(()=>{ PX._leadFlash('ADVANTAGE — PLAY ON',''); }); }));
+    steps.push(watch('The referee doesn’t whistle every foul. If a team is fouled but already has a clear chance, stopping play would only waste it — so the referee lets play continue. This is called advantage.',
+      ()=>{ clearHoldCinematic(); clearL4Overlays(); }));   // no animation — just the explanation, cleaned of the offside overlays
 
     // 4.8 — wrap-up: LESSON 4 COMPLETE headline FIRST, then the recap box (wider).
-    steps.push(watchLeadFlash('UNDERSTAND\n• Attacking the ball, and the player holding it, is allowed — that is not a foul.\n• Ordinary fouls are smaller, technical infringements: most often a defender fouling the ball-carrier as he shields and releases the ball, plus the ball-under and 2-metre offside.\n• An ordinary foul gives the other team a free throw, and nobody leaves the pool.\n• A free throw can be tossed up, passed, or — from outside 6 m — shot straight at goal.\n• The referee can wave play on when whistling would only take away a clear chance (advantage).',
+    steps.push(watchLeadFlash('UNDERSTAND\n• Attacking the ball, and the player holding it, is allowed — that is not a foul.\n• Ordinary fouls are smaller, technical infringements: most often a defender fouling the ball-carrier as he shields and releases the ball, plus the ball-under and 2-meter offside.\n• An ordinary foul gives the other team a free throw, and nobody leaves the pool.\n• A free throw can be tossed up, passed, or — from outside 6 m — shot straight on goal.\n• The referee can wave play on when whistling would only take away a clear chance (advantage).',
       'LESSON 4 COMPLETE', 'good', ()=>{ if(PX.stopLineBlink) PX.stopLineBlink(); PX.followBall(false); const bn=document.getElementById('tutorialBanner'); if(bn) bn.classList.add('pxWide'); }));
 
     return steps;
@@ -12667,6 +12664,8 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     try{ setShootingAngle(false); }catch(e){}
     try{ PX.clearSelections(); }catch(e){}
     try{ qa('[data-px="goaltap"]').forEach(e=>e.remove()); }catch(e){}
+    try{ if(PX.stopLineBlink) PX.stopLineBlink(); }catch(e){}   // clear any 2m/6m line blink
+    try{ clearL4Overlays(); }catch(e){}                         // clear ball-line / free-throw arrow
     try{ PX._holdBox=false; }catch(e){}   // never leave the instruction box suppressed after a jump
     try{ if(PX.clearFlash) PX.clearFlash(); }catch(e){}
   };
@@ -12703,10 +12702,13 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     try{ if(typeof clearTutorialGhost==='function') clearTutorialGhost(); }catch(e){}
     try{ if(PX.hideShootButton) PX.hideShootButton(); }catch(e){}
     try{ if(PX.hideBallUnderZoom) PX.hideBallUnderZoom(); if(PX.hideGoalZoom) PX.hideGoalZoom(); }catch(e){}
+    try{ if(PX.stopLineBlink) PX.stopLineBlink(); }catch(e){}   // drop any line-blink (2m red / 6m green) left running
+    try{ clearL4Overlays(); }catch(e){}                         // drop the ball-line / free-throw arrow overlays
     try{ if(PX.clearShotClockHighlight) PX.clearShotClockHighlight(); }catch(e){}
     try{ PX.centerDuel(false); PX.setCenterDuel(null,null,null); }catch(e){}
     try{ if(PX.followBall) PX.followBall(false); }catch(e){}
     try{ if(PX.clearSelections) PX.clearSelections(); }catch(e){}
+    try{ if(PX.choice&&PX.choice.clear) PX.choice.clear(); }catch(e){}   // drop any open question bar
     if(PX.shoot&&PX.shoot.cancel){ try{ PX.shoot.cancel(); }catch(e){} }
     if(PX.tap&&PX.tap.disarm){ try{ PX.tap.disarm(); }catch(e){} }
     PX._zonesActive=false; PX._holdBox=false;   // clear any suppressed-box state from a mid-animation jump
