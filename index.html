@@ -12744,7 +12744,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       PX.centerDuel(false); if(PX.setCenterDuel) PX.setCenterDuel(null,null,null);   // freeze the duel for a static scene
       PX.enterFrontCourt(); PX.followGoal('blue');
       if(!document.getElementById('pxRefTop')) PX.showReferees(); PX.startRefTracking();
-      const cx=BLUE_GOAL.x+2.5, cy=CY;                       // 2.5 m out from the blue goal
+      const cx=BLUE_GOAL.x+2.6, cy=CY;                       // ~2.5 m out; nudged toward the defender so they touch
       const wc=whiteCenter()||whiteFields()[0];              // White #7 — the centre
       const bc=blueCenter()||nearestBlue(wc);               // Blue #7 — the centre defender
       // Post the centre up at 2.5 m, facing the goal, ball in the (right) hand.
@@ -12755,8 +12755,8 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       PX.updateTeamLayering();
       PX._penShooter=wc; PX._penDef=bc;
       await delay(750);
-      // Blue #7 closes RIGHT onto the centre's back — hands touching him — the foul.
-      if(bc){ await swim(bc, {x:cx+0.45, y:cy}, 700);
+      // Blue #7 closes RIGHT onto the centre's back — hands touching his frame — the foul.
+      if(bc){ await swim(bc, {x:cx+0.25, y:cy}, 700);
         bc.dataset.rot=faceTo(+bc.dataset.x,+bc.dataset.y, cx,cy); if(typeof place==='function') place(bc); }
       PX.updateTeamLayering();
       spotlightCircle(cx, cy, 2.3, false);
@@ -12770,21 +12770,28 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       const sh=PX._penShooter||whiteCenter()||whiteFields()[0];
       if(PX.blinkLines) PX.blinkLines('yellow');             // highlight the 5-metre line (x=7)
       const SHX=7.7, SHY=CY;                                 // BEHIND the 5 m line, so the whole player + ball stay outside it
-      const anims=[];
-      if(sh) anims.push(swimSettle(sh, {x:SHX, y:SHY}, 1500, faceTo(SHX,SHY, BLUE_GOAL.x,BLUE_GOAL.y), 'v'));   // shooter behind the line, facing the goal
-      // Two Blue defenders may stand ~2 m to each side of the shooter, but must be
-      // OUTSIDE the 6 m line (x=8). In our demo they lie horizontal, facing the goal.
       const blues=blueFields();
-      const flankers=blues.slice(0,2);
-      const flankSpots=[{x:8.3, y:SHY-2.0}, {x:8.3, y:SHY+2.0}];
-      flankers.forEach((f,i)=>{ if(f) anims.push(swim(f, flankSpots[i], 1500, 'h')); });
-      // Everyone else clears well outside the 6 m line, spread along it.
-      const others=[...whiteFields(), ...blueFields()].filter(p=>p!==sh && flankers.indexOf(p)<0);
-      const ys=[3.5,6.5,9.5,14.5,17.5,20.5];
-      others.forEach((p,i)=>{ anims.push(swim(p, {x:9.7+(i%2)*0.9, y:ys[i%ys.length]}, 1500, 'h')); });
-      const gk=blueGoalie(); if(gk) anims.push(swimVerticalTrack(gk, {x:BLUE_GOAL.x+0.6, y:CY}, 1500, {x:SHX,y:SHY}));
+      const flankers=blues.slice(0,2);                       // the two defenders who stay for the penalty
+      const bgk=blueGoalie(), wgk=whiteGoalie();
+      const stay=new Set([sh, flankers[0], flankers[1], bgk].filter(Boolean));
+      const anims=[];
+      if(sh) anims.push(swimSettle(sh, {x:SHX, y:SHY}, 1600, faceTo(SHX,SHY, BLUE_GOAL.x,BLUE_GOAL.y), 'v'));   // shooter behind the line, facing the goal
+      // Two Blue defenders ~3 m to each side of the shooter, OUTSIDE the 6 m line (x=8),
+      // lying horizontal and facing the goal.
+      const flankSpots=[{x:8.3, y:SHY-3.0}, {x:8.3, y:SHY+3.0}];
+      flankers.forEach((f,i)=>{ if(f) anims.push(swim(f, flankSpots[i], 1600, 'h')); });
+      if(bgk) anims.push(swimVerticalTrack(bgk, {x:BLUE_GOAL.x+0.6, y:CY}, 1600, {x:SHX,y:SHY}));   // blue keeper holds the goal
+      // Everyone else leaves the penalty entirely — they swim to the OTHER (white) half
+      // and line up as if setting up the next attack at the white goal.
+      const movers=qa('.player').filter(p=> !stay.has(p));
+      let wi=0, bi=0;
+      movers.forEach(p=>{
+        if(p===wgk){ anims.push(swimSettle(p, {x:WHITE_GOAL.x-0.6, y:CY}, 1900, faceTo(WHITE_GOAL.x-0.6,CY, MID_X,CY), 'v')); return; }   // white keeper -> white goal
+        if(p.dataset.team==='white'){ const yy=6+wi*2.4; wi++; anims.push(swimSettle(p, {x:21, y:yy}, 1900, faceTo(21,yy, WHITE_GOAL.x,WHITE_GOAL.y), 'v')); }   // white attackers set up
+        else { const yy=7.5+bi*2.6; bi++; anims.push(swimSettle(p, {x:23.5, y:yy}, 1900, faceTo(23.5,yy, MID_X,CY), 'v')); }   // blue defenders mark them
+      });
       await Promise.all(anims);
-      flankers.forEach(f=>{ if(f){ f.dataset.pose='h'; f.dataset.rot=faceTo(+f.dataset.x,+f.dataset.y, BLUE_GOAL.x,BLUE_GOAL.y); if(typeof place==='function') place(f); } });   // horizontal, facing the goal
+      flankers.forEach(f=>{ if(f){ f.dataset.pose='h'; f.dataset.rot=faceTo(+f.dataset.x,+f.dataset.y, BLUE_GOAL.x,BLUE_GOAL.y); if(typeof place==='function') place(f); } });   // settle horizontal, facing the goal
       if(sh && typeof moveBallTo==='function'){ if(typeof ballCarrier!=='undefined') ballCarrier=sh; moveBallTo(sh,'right'); }
       PX.updateTeamLayering();
       if(PX.stopLineBlink) PX.stopLineBlink();
@@ -12814,7 +12821,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       function(){ return sixOnFiveSetupDemo().then(()=>{ PX.flash('6-ON-5','good',1800); }); }));
 
     // 5.4 — man-up ball movement: five perimeter passes, defenders sliding to block.
-    steps.push(animatedWatch('A player up, White swings the ball around the perimeter to make the defense shift and stretch — the way to create a high-scoring chance. The shaded corridor shows the area a defender would cover with their blocking arm when it is out.',
+    steps.push(animatedWatch('When playing 6-on-5, White tries to create a high-scoring opportunity by passing the ball around and making the defense shift around. For your better understanding of the defense, the shaded corridor shows the area a defender would cover with their blocking arm when it is out.',
       function(){ return manUpPassingDemo().then(()=>{ PX.flash('KEEP IT MOVING','good',1500); }); }));
 
     // 5.5 YOU TRY — find the open player (the unmarked right centre, NEW zone 2).
@@ -12874,11 +12881,11 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     steps.push(watch('Some fouls are heavier. An exclusion with substitution puts a player out for good but lets a teammate replace him right away. A brutality — a 4-minute exclusion — gives the other team a penalty and removes the player for the match. And a foul right in front of the goal is a penalty shot — let’s look at one now.'));
 
     // 5.9 — the penalty foul: attacker facing goal, no defender between him and it.
-    steps.push(animatedWatch('Here the White center is 2.5 meters out, facing the goal with the ball — and the only thing between him and the goal is the keeper, no defender. When a defender fouls an attacker in that position — holding, sinking or pulling him back from behind — the referee awards a penalty, because a clear scoring chance is being taken away. In this case it is a penalty even though the attacker already has the ball.',
+    steps.push(animatedWatch('Here the White center is 2.5 meters out, facing the goal with the ball — and the only thing between him and the goal is the keeper, no defender. When a defender fouls an attacker in that position — holding, sinking or pulling him back from behind — the referee awards a penalty, because a clear scoring chance is being taken away. And this is a penalty even though the White center is in possession of the ball.',
       function(){ return penaltyFoulDemo().then(()=>{ PX._leadFlash('PENALTY','whistle'); }); }));
 
     // 5.9b — the other common ways a penalty is given.
-    steps.push(watch('Penalties are given other ways too. Inside the 6-meter area, if an attacker — often the center — has a good chance to score and a defender stops it with a foul as he shoots or releases the ball (or even before he gets the ball), that is a penalty. And the goalkeeper has a special rule: if the keeper takes the ball under water inside his own 6-meter area, the other team gets a penalty as well.',
+    steps.push(watch('Penalties are given other ways too. Inside the 6-meter area, if an attacker — often the center — has a good chance to score and a defender stops it with a foul as he shoots or releases the ball (or even before he gets the ball), that is a penalty. And the goalkeeper has a special rule: if he is being attacked and takes the ball under water inside his own 6-meter area, the other team gets a penalty — though on his own, with no attacker on him, taking the ball under is fine.',
       ()=>{ if(PX.stopLineBlink) PX.stopLineBlink(); }));
 
     // 5.10 — set up the penalty at the 5-meter line.
