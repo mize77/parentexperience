@@ -11681,6 +11681,11 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       spotlightCircle(+c.dataset.x, +c.dataset.y, 1.9, false);
       if(typeof PX.whistle==='function'){ try{ PX.whistle(); }catch(e){} }
       await delay(900);
+      // Move both players BACK OUT of the 2m box to their starting spots, ready for the next step.
+      clearHoldCinematic(); if(PX.stopLineBlink) PX.stopLineBlink();
+      const backAnims=[ swim(c, {x:cFrom.x, y:cFrom.y}, 900) ];
+      if(cd && dFromX!=null) backAnims.push(swim(cd, {x:dFromX, y:+cd.dataset.y}, 900));
+      await Promise.all(backAnims);
     })();
   }
   // 4.6 — the free throw: three ways to take it (toss up / pass / direct shot from
@@ -12509,7 +12514,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       ()=>{ clearHoldCinematic(); clearL4Overlays(); }));   // no animation — just the explanation, cleaned of the offside overlays
 
     // 4.8 — wrap-up: LESSON 4 COMPLETE headline FIRST, then the recap box (wider).
-    steps.push(watchLeadFlash('UNDERSTAND\n• Attacking the ball or its carrier is not a foul.\n• Ordinary fouls are minor: fouling the releasing carrier, the ball-under, and 2 m offside.\n• They give a free throw — nobody leaves. It is tossed, passed, or shot from outside 6 m.\n• The ref can wave play on to keep a clear chance — the advantage.',
+    steps.push(watchLeadFlash('UNDERSTAND\n• Attacking the ball or its carrier is not a foul.\n• A typical ordinary foul is releasing the ball while under attack.\n• Other common ones are the ball-under, and offside in the 2 m box when ahead of the ball line.\n• The referee can give advantage instead of a foul when that favors the offense.',
       'LESSON 4 COMPLETE', 'good', ()=>{ if(PX.stopLineBlink) PX.stopLineBlink(); PX.followBall(false); const bn=document.getElementById('tutorialBanner'); if(bn) bn.classList.add('pxWide'); }));
 
     return steps;
@@ -12629,8 +12634,8 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       // doubleCenterCircle centroids around the blue goal (matches the app render).
       function z6v5(phiDeg, r){ const p=phiDeg*Math.PI/180; return { x:BLUE_GOAL.x + r*Math.cos(p), y:BLUE_GOAL.y + r*Math.sin(p) }; }
       const Z = {
-        centerL: z6v5(-45, 2.8),   // #3 left centre
-        centerR: z6v5( 45, 2.8),   // #2 right centre — the open man
+        centerL: z6v5(-30, 3.0),   // #3 left centre — pulled back so it (and its arms) clear the 2 m box
+        centerR: z6v5( 30, 3.0),   // #2 right centre — the open man, also clear of the 2 m box
         z1:      z6v5(-67.5, 6.5), // #6 far-left wing (front)
         z2:      z6v5(-22.5, 6.5), // #5 upper point  — starts with the ball
         z3:      z6v5( 22.5, 6.5), // #4 lower point
@@ -12708,6 +12713,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   function manUpPassingDemo(){
     return (async function(){
       stopFollow(); clearHoldCinematic(); PX.enterFrontCourt(); PX.followGoal('blue');
+      if(PX.blendOutZones) PX.blendOutZones();   // the field zones fade away now that the man-up is set — the passing plays on a clean field
       const E=PX._l5zoneEls||{};
       const ball0 = PX._l5ballCarrier || E.z2;
       if(ball0){ if(typeof ballCarrier!=='undefined') ballCarrier=ball0; if(typeof moveBallTo==='function') moveBallTo(ball0,'right'); }
@@ -12812,12 +12818,12 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       }));
 
     // 5.2 — the excluded player leaves the water.
-    steps.push(animatedWatch('An exclusion is a foul that counts as a personal foul on the player’s record. As a result he must leave the pool at his team’s re-entry area for 18 seconds — or sooner if his team wins the ball back or a goal is scored.',
+    steps.push(animatedWatch('An exclusion is a foul that counts as a personal foul on the player’s record. He leaves the field of play for the re-entry zone at the red marker for 18 seconds — or sooner if his team wins the ball back or a goal is scored.',
       function(){ return excludedLeavesDemo(); }));
 
     // 5.3 — the numerical difference: 6-on-5 / 5-on-6. White sets up its power
     // play in the 6-on-5 zones; Blue drops into the 4-2 man-down defence.
-    steps.push(animatedWatch('Now White has six field players to Blue’s five: for White it is a 6-on-5, or “man-up”; for Blue, a 5-on-6. White spreads into the zones, Blue sets a 4-2 defense. (The numbered zones are unofficial — a guide, not real pool markings.)',
+    steps.push(animatedWatch('Now White has a player more than Blue — this is called a 6-on-5, or man-up. The typical way to set up a man-up is the 4-2 system you can see here. (The numbered zones are unofficial — a guide, not real pool markings.)',
       function(){ return sixOnFiveSetupDemo().then(()=>{ PX.flash('6-ON-5','good',1800); }); }));
 
     // 5.4 — man-up ball movement: five perimeter passes, defenders sliding to block.
@@ -12877,17 +12883,20 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     steps.push(watch('A serious foul counts as a personal foul on the player’s record. Most are punished with an exclusion — 18 seconds out of the water. Collect three personal fouls in a game and you are out, with a substitute taking your place.',
       ()=>{ if(PX.clearShotBlocks) PX.clearShotBlocks(); }));
 
-    // 5.8b — the heavier variants and the bridge to penalties.
-    steps.push(watch('Heavier fouls go further. Exclusion with substitution: out for good, but replaced at once. Brutality (a 4-minute exclusion): a penalty for the other team, and out for the match. A foul in front of goal can be a penalty — let’s see one.'));
+    // 5.8b — heavier variant 1: exclusion with substitution.
+    steps.push(watch('An exclusion with substitution can be called for misconduct or too rough an action. The player is sent out for good, but a teammate may replace him after the 18-second exclusion time.'));
+
+    // 5.8c — heavier variant 2: brutality.
+    steps.push(watch('An exclusion for brutality is the most serious: the other team gets a penalty, the player is out for the whole match, and his team plays a man down for a full 4 minutes. A foul in front of the goal can also be a penalty — let’s see one.'));
 
     // 5.9 — the penalty foul: attacker facing goal, no defender between him and it.
-    steps.push(animatedWatch('The White center is 2.5 m out, facing the goal with the ball — only the keeper between him and the goal. A foul from behind here is a penalty: it takes away a clear scoring chance. And it counts even though he is in possession of the ball.',
+    steps.push(animatedWatch('The White center is in the 6-meter area, facing the goal with the ball, only the keeper between him and the goal. A foul from behind here is a penalty — it takes away a clear chance, even though he has the ball in possession.',
       function(){ return penaltyFoulDemo().then(()=>{ PX._leadFlash('PENALTY','whistle'); }); }));
 
     // 5.9b — the other common ways a penalty is given (split into two boxes).
-    steps.push(watch('Penalties happen other ways too. Inside the 6-meter area, if an attacker with a good chance to score is stopped by a foul — as he shoots, releases the ball, or even before he gets it — that is a penalty.',
+    steps.push(watch('Other ways of earning a penalty: inside the 6-meter area, an attacker with a good chance to score is stopped by a foul — as he shoots, releases the ball, or even before he gets it.',
       ()=>{ if(PX.stopLineBlink) PX.stopLineBlink(); }));
-    steps.push(watch('The goalkeeper has a special rule too: if he is being attacked and takes the ball under water inside his own 6-meter area, the other team gets a penalty. On his own, with no attacker on him, taking the ball under is fine.'));
+    steps.push(watch('And remember the special goalkeeper rule: if he is under attack and takes the ball under water inside his own 6-meter area, the other team gets a penalty. With no attacker on him, taking the ball under is fine.'));
 
     // 5.10 — set up the penalty at the 5-meter line.
     steps.push(animatedWatch('A penalty is taken from the 5-meter line, with only the goalkeeper to beat — everyone else clears out. It is one of the very best chances to score in the whole game.',
@@ -12911,7 +12920,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     });
 
     // 5.12 wrap-up.
-    steps.push(watchLeadFlash('UNDERSTAND\n• Fouling a player WITHOUT the ball is an exclusion: 18 seconds out, and a man-up for his team.\n• A player up, move the ball, find the open man, score.\n• A foul in front of the goal can be a penalty — even on a player WITH the ball.\n• A penalty is a shot from 5 meters, keeper only.\n• Exclusions and penalties are two kinds of personal foul.',
+    steps.push(watchLeadFlash('UNDERSTAND\n• Fouling a player WITHOUT the ball is an exclusion — 18 s out, a man-up for his team.\n• A foul in front of goal can be a penalty — even on a player WITH the ball.\n• A penalty: one continuous shot from 5 m on the whistle, keeper only; keeper on the goal line until the signal.\n• Exclusions and penalties are two kinds of personal foul.',
       'LESSON 5 COMPLETE', 'good', ()=>{ if(PX.clearShotBlocks) PX.clearShotBlocks(); if(PX.stopLineBlink) PX.stopLineBlink(); PX.followBall(false); const bn=document.getElementById('tutorialBanner'); if(bn) bn.classList.add('pxWide'); }));
 
     return steps;
