@@ -12692,13 +12692,15 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     PX._l5blue.forEach(b=>{ const dx=b.x-hx, dy=b.y-hy, d=dx*dx+dy*dy; if(d<bd){ bd=d; best=b; } });
     if(!best) return;
     const prev=PX._l5presser;
-    if(prev && prev.el!==best.el && prev.el.isConnected){          // previous presser slides back into shape, arm down
+    if(prev && prev.el!==best.el && prev.el.isConnected){          // previous presser eases back into shape — stays VERTICAL, arm down
       prev.el.dataset.blockArm='none'; if(typeof updatePlayerVisual==='function') updatePlayerVisual(prev.el);
-      swimSettle(prev.el, {x:prev.x, y:prev.y}, 360, faceTo(prev.x,prev.y, hx,hy), 'v');
+      swimVerticalTrack(prev.el, {x:prev.x, y:prev.y}, 360, {x:hx, y:hy});   // upright, still watching the ball
     }
     const dx=BLUE_GOAL.x-hx, dy=BLUE_GOAL.y-hy, dl=Math.hypot(dx,dy)||1;
     const sx=hx+dx/dl*1.2, sy=hy+dy/dl*1.2;                        // 1.2 m goal-side of the holder
-    await swimSettle(best.el, {x:sx, y:sy}, 420, faceTo(sx,sy, hx,hy), 'v');
+    // Step out to the holder while staying VERTICAL (no flip to a horizontal swim) —
+    // a defender guarding the ball keeps his body up with the block arm out.
+    await swimVerticalTrack(best.el, {x:sx, y:sy}, 420, {x:hx, y:hy});
     best.el.dataset.blockArm = pickBlockArm(best.el, holderEl);    // raise the arm that covers the shot -> corridor
     if(typeof updatePlayerVisual==='function') updatePlayerVisual(best.el);
     PX._l5presser=best; PX.setShotBlockOn(true);
@@ -12735,21 +12737,27 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     return (async function(){
       stopFollow(); clearHoldCinematic(); PX.clearShotBlocks();
       PX.centerDuel(false); if(PX.setCenterDuel) PX.setCenterDuel(null,null,null);
-      if(PX.blendOutZones) PX.blendOutZones();               // drop the 6-on-5 overlay for a clean penalty scene
-      PX.clearActors();
-      const cx=BLUE_GOAL.x+2.5, cy=CY;                       // 2.5 m out from the blue goal
-      const wc=makePlayer(['W6','white', cx, cy, 'v', faceTo(cx,cy, BLUE_GOAL.x,BLUE_GOAL.y)]);   // centre (#7), facing the goal, ball in hand
-      const bc=makePlayer(['B6','blue',  cx+0.75, cy, 'v', faceTo(cx+0.75,cy, cx,cy)]);           // centre defender on his back
-      makePlayer(['BG','goalie', BLUE_GOAL.x+0.6, cy, 'v', faceTo(BLUE_GOAL.x+0.6,cy, cx,cy)]);   // blue keeper
-      if(typeof moveBallTo==='function') moveBallTo(wc,'right');
-      if(typeof ballCarrier!=='undefined') ballCarrier=wc;
-      PX.updateTeamLayering();
+      if(PX.blendOutZones) PX.blendOutZones();               // drop the 6-on-5 overlay
+      // A full, realistic 6-v-6 scene: five attacker/defender pairs spread around
+      // the perimeter, plus the centre pair we foul in front of the goal.
+      PX.clearActors(); PX.ensureOffenseBoard();
+      PX.centerDuel(false); if(PX.setCenterDuel) PX.setCenterDuel(null,null,null);   // freeze the duel for a static scene
       PX.enterFrontCourt(); PX.followGoal('blue');
       if(!document.getElementById('pxRefTop')) PX.showReferees(); PX.startRefTracking();
+      const cx=BLUE_GOAL.x+2.5, cy=CY;                       // 2.5 m out from the blue goal
+      const wc=whiteCenter()||whiteFields()[0];              // White #7 — the centre
+      const bc=blueCenter()||nearestBlue(wc);               // Blue #7 — the centre defender
+      // Post the centre up at 2.5 m, facing the goal, ball in the (right) hand.
+      wc.dataset.pose='v'; wc.dataset.x=cx; wc.dataset.y=cy; wc.dataset.rot=faceTo(cx,cy, BLUE_GOAL.x,BLUE_GOAL.y); if(typeof place==='function') place(wc);
+      if(typeof ballCarrier!=='undefined') ballCarrier=wc;
+      if(typeof moveBallTo==='function') moveBallTo(wc,'right');
+      if(bc){ bc.dataset.pose='v'; if(typeof place==='function') place(bc); }
+      PX.updateTeamLayering();
       PX._penShooter=wc; PX._penDef=bc;
       await delay(750);
-      await swim(bc, {x:cx+0.55, y:cy}, 700);                // defender presses into the centre's back — the foul
-      bc.dataset.rot=faceTo(+bc.dataset.x,+bc.dataset.y, cx,cy); if(typeof place==='function') place(bc);
+      // Blue #7 closes RIGHT onto the centre's back — hands touching him — the foul.
+      if(bc){ await swim(bc, {x:cx+0.45, y:cy}, 700);
+        bc.dataset.rot=faceTo(+bc.dataset.x,+bc.dataset.y, cx,cy); if(typeof place==='function') place(bc); }
       PX.updateTeamLayering();
       spotlightCircle(cx, cy, 2.3, false);
       if(typeof PX.whistle==='function'){ try{ PX.whistle(); }catch(e){} }
@@ -12759,13 +12767,24 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   function penaltySetupDemo(){
     return (async function(){
       stopFollow(); clearHoldCinematic();
-      const sh=PX._penShooter||whiteCenter()||whiteFields()[0], df=PX._penDef;
-      if(PX.blinkLines) PX.blinkLines('yellow');             // highlight the 5-metre line
+      const sh=PX._penShooter||whiteCenter()||whiteFields()[0];
+      if(PX.blinkLines) PX.blinkLines('yellow');             // highlight the 5-metre line (x=7)
+      const SHX=7.7, SHY=CY;                                 // BEHIND the 5 m line, so the whole player + ball stay outside it
       const anims=[];
-      if(df) anims.push(swimSettle(df, {x:9.5, y:6.5}, 1500, faceTo(9.5,6.5, BLUE_GOAL.x,BLUE_GOAL.y), 'v'));   // defender clears well outside 6 m
-      if(sh) anims.push(swimSettle(sh, {x:7, y:CY}, 1500, faceTo(7,CY, BLUE_GOAL.x,BLUE_GOAL.y), 'v'));          // shooter to the 5-metre line
-      const gk=blueGoalie(); if(gk) anims.push(swimVerticalTrack(gk, {x:BLUE_GOAL.x+0.6, y:CY}, 1500, {x:7,y:CY}));
+      if(sh) anims.push(swimSettle(sh, {x:SHX, y:SHY}, 1500, faceTo(SHX,SHY, BLUE_GOAL.x,BLUE_GOAL.y), 'v'));   // shooter behind the line, facing the goal
+      // Two Blue defenders may stand ~2 m to each side of the shooter, but must be
+      // OUTSIDE the 6 m line (x=8). In our demo they lie horizontal, facing the goal.
+      const blues=blueFields();
+      const flankers=blues.slice(0,2);
+      const flankSpots=[{x:8.3, y:SHY-2.0}, {x:8.3, y:SHY+2.0}];
+      flankers.forEach((f,i)=>{ if(f) anims.push(swim(f, flankSpots[i], 1500, 'h')); });
+      // Everyone else clears well outside the 6 m line, spread along it.
+      const others=[...whiteFields(), ...blueFields()].filter(p=>p!==sh && flankers.indexOf(p)<0);
+      const ys=[3.5,6.5,9.5,14.5,17.5,20.5];
+      others.forEach((p,i)=>{ anims.push(swim(p, {x:9.7+(i%2)*0.9, y:ys[i%ys.length]}, 1500, 'h')); });
+      const gk=blueGoalie(); if(gk) anims.push(swimVerticalTrack(gk, {x:BLUE_GOAL.x+0.6, y:CY}, 1500, {x:SHX,y:SHY}));
       await Promise.all(anims);
+      flankers.forEach(f=>{ if(f){ f.dataset.pose='h'; f.dataset.rot=faceTo(+f.dataset.x,+f.dataset.y, BLUE_GOAL.x,BLUE_GOAL.y); if(typeof place==='function') place(f); } });   // horizontal, facing the goal
       if(sh && typeof moveBallTo==='function'){ if(typeof ballCarrier!=='undefined') ballCarrier=sh; moveBallTo(sh,'right'); }
       PX.updateTeamLayering();
       if(PX.stopLineBlink) PX.stopLineBlink();
@@ -12791,17 +12810,17 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
 
     // 5.3 — the numerical difference: 6-on-5 / 5-on-6. White sets up its power
     // play in the 6-on-5 zones; Blue drops into the 4-2 man-down defence.
-    steps.push(animatedWatch('Now White has six field players against Blue’s five. The very same situation has two names: for the attacking White it is a 6-on-5 — a “man-up” or power play; for the defending Blue it is a 5-on-6. White spreads into the power-play zones while Blue sets a 4-2 defense.',
+    steps.push(animatedWatch('Now White has six field players against Blue’s five. The very same situation has two names: for the attacking White it is a 6-on-5 — a “man-up” or power play; for the defending Blue it is a 5-on-6. White spreads into the power-play zones while Blue sets a 4-2 defense. (These numbered zones are unofficial — just a helpful way to picture where the players stand, not real markings painted in the pool.)',
       function(){ return sixOnFiveSetupDemo().then(()=>{ PX.flash('6-ON-5','good',1800); }); }));
 
     // 5.4 — man-up ball movement: five perimeter passes, defenders sliding to block.
-    steps.push(animatedWatch('A player up, White swings the ball around the perimeter to make the five defenders shift and stretch — the way to create a high-scoring chance. Watch how the Blue defender nearest the ball always steps out to block the shooting lane (the shaded corridor), while the others hold the 4-2 shape.',
+    steps.push(animatedWatch('A player up, White swings the ball around the perimeter to make the defense shift and stretch — the way to create a high-scoring chance. The shaded corridor shows the area a defender would cover with their blocking arm when it is out.',
       function(){ return manUpPassingDemo().then(()=>{ PX.flash('KEEP IT MOVING','good',1500); }); }));
 
     // 5.5 YOU TRY — find the open player (the unmarked right centre, NEW zone 2).
     steps.push({
       instruction:'All that ball movement has pulled the defense out of shape and left one White attacker open for a good shot. Find the open player and tap him.',
-      bannerSide:'top', skipDimPhase:true, highlight:null,
+      bannerSide:'top', skipDimPhase:true, highlight:null, allowedSelectors:'#board',   // the field must stay tappable so the parent can tap the open player
       onEnter:function(){ PX._l5open=false; clearHoldCinematic();
         openWhite = PX._l5openMan || whiteCenter() || whiteFields()[0];   // NEW zone 2 (right centre), left open by the shift
         if(openWhite) spotlightCircle(+openWhite.dataset.x, +openWhite.dataset.y, 2.2, false);   // a soft hint around the open area
@@ -12827,12 +12846,14 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     // the goal, so the parent simply presses SHOOT (pre-aimed at a corner) to score.
     steps.push({
       instruction:'The center now has the ball right in front of the goal, with the keeper beaten. Press the SHOOT button to finish the power play.',
-      bannerSide:'top', skipDimPhase:true, highlight:null,
+      bannerSide:'top', skipDimPhase:true, highlight:null, allowedSelectors:['#pxShootBtn'],   // the SHOOT button stays tappable under the lock
       onEnter:function(){ PX._l5goal=false; clearHoldCinematic(); PX.clearShotBlocks();   // clear the blocking corridors before the shot
         const w=openWhite||PX._l5openMan||whiteCenter()||currentWhiteShooter();
         if(w){ if(typeof ballCarrier!=='undefined') ballCarrier=w; if(typeof moveBallTo==='function') moveBallTo(w,'right'); }
         PX.enterFrontCourt(); PX.followGoal('blue');
-        PX.shoot.begin({ side:'left', subtleZone:true, cornerScore:true, preAim:{x:BLUE_GOAL.x, y:13.35}, ghost:{x:BLUE_GOAL.x, y:13.35}, onResult:function(res){
+        const shy = w ? +w.dataset.y : CY;
+        const postY = shy <= CY ? 10.65 : 13.35;   // aim the NEAR post on the shooter's side — the keeper can't slide across to it
+        PX.shoot.begin({ side:'left', subtleZone:true, cornerScore:true, preAim:{x:BLUE_GOAL.x, y:postY}, ghost:{x:BLUE_GOAL.x, y:postY}, onResult:function(res){
           if(res && res.result==='GOAL'){ PX.flash('GOAL! The power play pays off','goal'); setTimeout(()=>{ PX._l5goal=true; }, 1200); }
           else { setTimeout(()=>{ PX._l5goal=true; }, 600); }
         }});
@@ -12845,9 +12866,12 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     steps.push(watch('The excluded player can come back into the game as soon as ANY of these happens: a goal is scored, his team wins back possession of the ball, or his 18 seconds are up (handy when the shot clock still had more time on it). Whichever comes first ends the man-up.',
       ()=>{ if(PX.stopLineBlink) PX.stopLineBlink(); }));
 
-    // 5.8 — personal fouls and their two main consequences (exclusion + penalty).
-    steps.push(watchLeadFlash('GOOD TO KNOW\n• A serious foul counts as a personal foul on the player’s record — collect three and you are out of the game (a substitute takes your place).\n• Most personal fouls are punished with an exclusion (18 seconds out). Heavier ones go further: an exclusion with substitution puts the player out for good but lets a teammate replace him at once (misconduct or a very rough foul), and a brutality — a 4-minute exclusion — gives the other team a penalty shot, removes the player for the match, and leaves his team a man down for a full 4 minutes.\n• The other big consequence is a penalty shot for a foul right in front of the goal — let’s look at one now.',
-      'PERSONAL FOULS', 'good', ()=>{ if(PX.clearShotBlocks) PX.clearShotBlocks(); const bn=document.getElementById('tutorialBanner'); if(bn) bn.classList.add('pxWide'); }));
+    // 5.8a — personal fouls and the basic exclusion.
+    steps.push(watch('A serious foul counts as a personal foul on the player’s record. Most are punished with an exclusion — 18 seconds out of the water. Collect three personal fouls in a game and you are out, with a substitute taking your place.',
+      ()=>{ if(PX.clearShotBlocks) PX.clearShotBlocks(); }));
+
+    // 5.8b — the heavier variants and the bridge to penalties.
+    steps.push(watch('Some fouls are heavier. An exclusion with substitution puts a player out for good but lets a teammate replace him right away. A brutality — a 4-minute exclusion — gives the other team a penalty and removes the player for the match. And a foul right in front of the goal is a penalty shot — let’s look at one now.'));
 
     // 5.9 — the penalty foul: attacker facing goal, no defender between him and it.
     steps.push(animatedWatch('Here the White center is 2.5 meters out, facing the goal with the ball — and the only thing between him and the goal is the keeper, no defender. When a defender fouls an attacker in that position — holding, sinking or pulling him back from behind — the referee awards a penalty, because a clear scoring chance is being taken away. In this case it is a penalty even though the attacker already has the ball.',
@@ -12864,7 +12888,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     // 5.11 YOU TRY — take the penalty (press SHOOT -> goal).
     steps.push({
       instruction:'It’s a penalty — a near-certain goal. Press the SHOOT button to bury it.',
-      bannerSide:'top', skipDimPhase:true, highlight:null,
+      bannerSide:'top', skipDimPhase:true, highlight:null, allowedSelectors:['#pxShootBtn'],   // the SHOOT button stays tappable under the lock
       onEnter:function(){ PX._penGoal=false; clearHoldCinematic();
         const w=PX._penShooter||whiteCenter()||whiteFields()[0];
         if(w){ if(typeof ballCarrier!=='undefined') ballCarrier=w; if(typeof moveBallTo==='function') moveBallTo(w,'right'); }
@@ -12879,7 +12903,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     });
 
     // 5.12 wrap-up.
-    steps.push(watchLeadFlash('UNDERSTAND\n• Holding, sinking or pulling back a player WITHOUT the ball is an exclusion — a personal foul that sends him out for 18 seconds and gives his team a man-up (6-on-5).\n• A player up, move the ball to make the defense shift, find the open man, and score.\n• Fouling an attacker who has a clear path to the goal — with only the keeper in the way — is a penalty, even if he has the ball. So is fouling a good chance inside 6 meters, or the keeper taking the ball under in his own 6 meters.\n• A penalty is a shot from 5 meters with only the keeper to beat.\n• Exclusions and penalties are the two faces of a personal foul.',
+    steps.push(watchLeadFlash('UNDERSTAND\n• Fouling a player WITHOUT the ball is an exclusion: 18 seconds out, and a man-up for his team.\n• A player up, move the ball, find the open man, score.\n• A foul in front of the goal can be a penalty — even on a player WITH the ball.\n• A penalty is a shot from 5 meters, keeper only.\n• Exclusions and penalties are two kinds of personal foul.',
       'LESSON 5 COMPLETE', 'good', ()=>{ if(PX.clearShotBlocks) PX.clearShotBlocks(); if(PX.stopLineBlink) PX.stopLineBlink(); PX.followBall(false); const bn=document.getElementById('tutorialBanner'); if(bn) bn.classList.add('pxWide'); }));
 
     return steps;
@@ -13143,7 +13167,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     else PX.flash('That’s the last lesson so far','',2000);
   };
   // Lesson names for the jump-to-lesson picker (index matches _lessonStarts).
-  PX._lessonTitles = ['Lesson 1 — The Pool & the Players','Lesson 2 — How the Game Works','Lesson 3 — Possession & the Shot Clock','Lesson 4 — Ordinary Fouls','Lesson 5 — Exclusions & the Power Play'];
+  PX._lessonTitles = ['Lesson 1 — The Pool & the Players','Lesson 2 — How the Game Works','Lesson 3 — Possession & the Shot Clock','Lesson 4 — Ordinary Fouls','Lesson 5 — Exclusions & Penalties'];
   // Which lesson the current step belongs to (0-based).
   PX.currentLesson = function(){
     const starts=PX._lessonStarts||[0];
