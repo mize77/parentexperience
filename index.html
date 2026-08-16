@@ -12556,51 +12556,93 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     })();
   }
 
-  /* The 6-on-5 (man-up) SET-UP. Blends in the app's "6v5" field-zone overlay,
-     then swims all six White field players into the six zones (each smart-facing
-     the attacked blue goal) and the five remaining Blue defenders into a classic
-     4-2 man-down: three low defenders in the gaps of the four White attackers on
-     the front line (closer to the goal) and two high defenders blocking the two
-     White attackers farther out. The White player in field-zone 5 (the left
-     centre / hole set) holds the ball; the second centre (zone 6) is the open man
-     the parent finds next. Positions come straight from the app's
-     doubleCenterCircle geometry so the players sit inside the drawn wedges. */
+  /* US-style man-up field-zone numbering, applied to the app's "6v5" overlay via
+     customLabels. From the DEFENDING goalie's view (blue goal, looking up-field):
+     the four perimeter zones read right→left as 1, 4, 5, 6; the two central zones
+     are 2 (right) and 3 (left). Mapping onto the doubleCenterCircle ids:
+       z4→1  centerR→2  centerL→3  z3→4  z2→5  z1→6                                  */
+  PX.applyManUpNumbers = function(){
+    try{
+      if(typeof MIZE==='undefined' || !MIZE.State || !MIZE.State.fieldZones) return;
+      MIZE.State.fieldZones.customLabels = MIZE.State.fieldZones.customLabels || {};
+      MIZE.State.fieldZones.customLabels['6v5'] = {
+        z4:{number:1}, centerR:{number:2}, centerL:{number:3}, z3:{number:4}, z2:{number:5}, z1:{number:6}
+      };
+      if(typeof renderFieldZones==='function') renderFieldZones();
+    }catch(e){}
+  };
+  // Turn the app's translucent shot-block corridors on/off (the coverage wedge
+  // behind a defender's raised blocking arm).
+  PX.setShotBlockOn = function(on){
+    try{ if(typeof shotBlockActive!=='undefined'){ shotBlockActive=!!on; } }catch(e){}
+    try{ if(typeof _shotBlockUI!=='undefined' && _shotBlockUI && _shotBlockUI.render) _shotBlockUI.render(); }catch(e){}
+    try{ if(typeof renderShotBlockCorridors==='function') renderShotBlockCorridors(); }catch(e){}
+  };
+  // Drop every raised block arm + hide the corridors (used on lesson skip / when a
+  // new scene should start clean).
+  PX.clearShotBlocks = function(){
+    try{ qa('.player').forEach(p=>{ if(p.dataset.blockArm && p.dataset.blockArm!=='none'){ p.dataset.blockArm='none'; if(typeof updatePlayerVisual==='function') updatePlayerVisual(p); } }); }catch(e){}
+    PX.setShotBlockOn(false);
+  };
+  // Choose the blocking arm ('left'/'right') that actually yields a corridor inside
+  // the goal for this defender/ball-holder pair; fall back to reaching toward mid-goal.
+  function pickBlockArm(def, holder){
+    for(const a of ['left','right']){
+      def.dataset.blockArm=a;
+      if(typeof computeShotBlockCorridor==='function'){ const r=computeShotBlockCorridor(def, holder); if(r && r.points) return a; }
+    }
+    return (+def.dataset.y) <= CY ? 'right' : 'left';
+  }
+
+  /* The 6-on-5 (man-up) SET-UP. Blends in the app's "6v5" overlay (renumbered
+     US-style), swims all six White field players into the six zones (each
+     smart-facing the attacked blue goal), and drops the five remaining Blue
+     defenders into a 4-2 man-down (three low in the gaps of the four front
+     attackers, two high on the two far points). The White player in the NEW
+     field-zone 5 (the upper point, id z2) holds the ball; the NEW field-zone 2
+     (right centre, id centerR) is the open man the parent finds after the pass
+     sequence. All positions come from the app's doubleCenterCircle geometry so the
+     players sit inside the drawn wedges. References are stashed on PX for the
+     passing demo that follows. */
   function sixOnFiveSetupDemo(){
     return (async function(){
       stopFollow(); clearHoldCinematic(); if(PX.stopLineBlink) PX.stopLineBlink();
-      PX.centerDuel(false);
+      PX.clearShotBlocks(); PX.centerDuel(false);
       // Blend in the 6-on-5 zones (fade the overlay up before anyone swims).
       if(typeof selectFieldZoneSet==='function'){
-        selectFieldZoneSet('6v5'); PX._zonesActive=true;
+        selectFieldZoneSet('6v5'); PX.applyManUpNumbers(); PX._zonesActive=true;
         const zsvg=document.getElementById('fieldZonesSvg');
         if(zsvg){ zsvg.style.transition='opacity 1s ease'; zsvg.style.opacity='0'; requestAnimationFrame(()=>requestAnimationFrame(()=>{ zsvg.style.opacity='1'; })); }
       }
       await delay(1050);   // let the zones blend in first
 
-      // doubleCenterCircle centroids around the blue goal (matches the app render:
-      // two inner centres over the -90..0 and 0..90 halves, four outer 45° wedges).
+      // doubleCenterCircle centroids around the blue goal (matches the app render).
       function z6v5(phiDeg, r){ const p=phiDeg*Math.PI/180; return { x:BLUE_GOAL.x + r*Math.cos(p), y:BLUE_GOAL.y + r*Math.sin(p) }; }
       const Z = {
-        centerL: z6v5(-45, 2.8),   // #5 Left Centre  — hole set, holds the ball
-        centerR: z6v5( 45, 2.8),   // #6 Right Centre — the open man
-        z1:      z6v5(-67.5, 6.5), // #1 Left Wing   (front line)
-        z2:      z6v5(-22.5, 6.5), // #2 Left Shooter (far point)
-        z3:      z6v5( 22.5, 6.5), // #3 Right Shooter(far point)
-        z4:      z6v5( 67.5, 6.5)  // #4 Right Wing  (front line)
+        centerL: z6v5(-45, 2.8),   // #3 left centre
+        centerR: z6v5( 45, 2.8),   // #2 right centre — the open man
+        z1:      z6v5(-67.5, 6.5), // #6 far-left wing (front)
+        z2:      z6v5(-22.5, 6.5), // #5 upper point  — starts with the ball
+        z3:      z6v5( 22.5, 6.5), // #4 lower point
+        z4:      z6v5( 67.5, 6.5)  // #1 far-right wing (front)
       };
 
-      // --- White: six field players -> six zones, ball at field-zone 5.
+      // --- White: six field players -> six zones. Ball starts in NEW zone 5 (z2).
       const whites = whiteFields();
       let carrier = (typeof ballCarrier!=='undefined' && ballCarrier && ballCarrier.dataset.team==='white') ? ballCarrier : whites[0];
       const rest = whites.filter(w=>w!==carrier);
-      const openMan = rest[0];                 // second centre (#6) — the open man
-      const others  = rest.slice(1);           // four remaining -> wings + points
+      const openMan = rest[0];                 // NEW zone 2 (centerR) — the open man
+      const others  = rest.slice(1);           // four remaining
       const wAssign = [
-        { el:carrier, at:Z.centerL }, { el:openMan, at:Z.centerR },
-        { el:others[0], at:Z.z1 }, { el:others[1], at:Z.z4 },   // front-line wings
-        { el:others[2], at:Z.z2 }, { el:others[3], at:Z.z3 }    // far points
+        { el:carrier, zone:'z2', at:Z.z2 },        // NEW #5 — ball
+        { el:openMan, zone:'centerR', at:Z.centerR }, // NEW #2 — open man
+        { el:others[0], zone:'z1', at:Z.z1 },      // NEW #6
+        { el:others[1], zone:'z3', at:Z.z3 },      // NEW #4
+        { el:others[2], zone:'z4', at:Z.z4 },      // NEW #1
+        { el:others[3], zone:'centerL', at:Z.centerL } // NEW #3
       ];
       PX._l5ballCarrier = carrier; PX._l5openMan = openMan;
+      PX._l5zoneEls = {}; wAssign.forEach(a=>{ if(a.el) PX._l5zoneEls[a.zone]=a.el; });
 
       const anims=[];
       wAssign.forEach(a=>{ if(!a.el) return;
@@ -12608,19 +12650,66 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
 
       // --- Blue: the five remaining defenders in a 4-2 (3 low in the gaps, 2 high).
       const blues = blueFields().filter(b=>b!==PX._exclPlayer).slice(0,5);
-      // Front line (closer to goal), already top->bottom by y: z1, centreL, centreR, z4.
-      const front = [Z.z1, Z.centerL, Z.centerR, Z.z4];
+      const front = [Z.z1, Z.centerL, Z.centerR, Z.z4];   // four front attackers, top->bottom by y
       const goalSide = (pt, m)=>{ const dx=BLUE_GOAL.x-pt.x, dy=BLUE_GOAL.y-pt.y, dl=Math.hypot(dx,dy)||1; return { x:pt.x+dx/dl*m, y:pt.y+dy/dl*m }; };
       const lowSpots=[];
       for(let i=0;i<front.length-1;i++){ lowSpots.push(goalSide({ x:(front[i].x+front[i+1].x)/2, y:(front[i].y+front[i+1].y)/2 }, 0.8)); }   // in each gap, a touch goal-side
-      const highSpots=[Z.z2, Z.z3].map(t=>({ at:goalSide(t,1.3), look:t }));   // goal-side of each far point, facing him
-      lowSpots.forEach((s,i)=>{ const b=blues[i]; if(b) anims.push(swimSettle(b, s, 3200, faceTo(s.x,s.y, Z.centerL.x,Z.centerL.y), 'v')); });   // low D watch the ball
-      highSpots.forEach((h,i)=>{ const b=blues[3+i]; if(b) anims.push(swimSettle(b, h.at, 3200, faceTo(h.at.x,h.at.y, h.look.x,h.look.y), 'v')); });
+      const highSpots=[Z.z2, Z.z3].map(t=>goalSide(t,1.3));                                    // goal-side of each far point
+      PX._l5blue=[];
+      lowSpots.forEach((s,i)=>{ const b=blues[i]; if(b){ anims.push(swimSettle(b, s, 3200, faceTo(s.x,s.y, Z.z2.x,Z.z2.y), 'v')); PX._l5blue.push({el:b, x:s.x, y:s.y}); } });   // low D watch the ball
+      highSpots.forEach((s,i)=>{ const b=blues[3+i]; if(b){ const look=[Z.z2,Z.z3][i]; anims.push(swimSettle(b, s, 3200, faceTo(s.x,s.y, look.x,look.y), 'v')); PX._l5blue.push({el:b, x:s.x, y:s.y}); } });
+      PX._l5presser=null;
 
       await Promise.all(anims);
       if(carrier && typeof moveBallTo==='function'){ if(typeof ballCarrier!=='undefined') ballCarrier=carrier; moveBallTo(carrier,'right'); }   // ball rests in zone 5
       PX.updateTeamLayering();
       PX.enterFrontCourt(); PX.followGoal('blue');
+    })();
+  }
+
+  /* MAN-UP BALL MOVEMENT. White swings the ball around the perimeter umbrella —
+     five passes, each to the next neighbouring perimeter player. On every pass the
+     Blue defender closest to the new ball-holder steps out to a smart blocking
+     position (goal-side of the holder, facing him) and raises a blocking arm so the
+     app's translucent shot-block corridor shows; the previous presser drops back
+     into the 4-2 shape. The ball ends on the lower point (z3), next to the open
+     right-centre the parent taps afterward. */
+  async function pressNearest(holderEl){
+    if(!PX._l5blue || !PX._l5blue.length || !holderEl) return;
+    const hx=+holderEl.dataset.x, hy=+holderEl.dataset.y;
+    let best=null, bd=Infinity;
+    PX._l5blue.forEach(b=>{ const dx=b.x-hx, dy=b.y-hy, d=dx*dx+dy*dy; if(d<bd){ bd=d; best=b; } });
+    if(!best) return;
+    const prev=PX._l5presser;
+    if(prev && prev.el!==best.el && prev.el.isConnected){          // previous presser slides back into shape, arm down
+      prev.el.dataset.blockArm='none'; if(typeof updatePlayerVisual==='function') updatePlayerVisual(prev.el);
+      swimSettle(prev.el, {x:prev.x, y:prev.y}, 360, faceTo(prev.x,prev.y, hx,hy), 'v');
+    }
+    const dx=BLUE_GOAL.x-hx, dy=BLUE_GOAL.y-hy, dl=Math.hypot(dx,dy)||1;
+    const sx=hx+dx/dl*1.2, sy=hy+dy/dl*1.2;                        // 1.2 m goal-side of the holder
+    await swimSettle(best.el, {x:sx, y:sy}, 420, faceTo(sx,sy, hx,hy), 'v');
+    best.el.dataset.blockArm = pickBlockArm(best.el, holderEl);    // raise the arm that covers the shot -> corridor
+    if(typeof updatePlayerVisual==='function') updatePlayerVisual(best.el);
+    PX._l5presser=best; PX.setShotBlockOn(true);
+  }
+  function manUpPassingDemo(){
+    return (async function(){
+      stopFollow(); clearHoldCinematic(); PX.enterFrontCourt(); PX.followGoal('blue');
+      const E=PX._l5zoneEls||{};
+      const ball0 = PX._l5ballCarrier || E.z2;
+      if(ball0){ if(typeof ballCarrier!=='undefined') ballCarrier=ball0; if(typeof moveBallTo==='function') moveBallTo(ball0,'right'); }
+      await pressNearest(ball0);                                   // the defender on the starting holder already presses
+      await delay(500);
+      // perimeter swing (ids): z2(5) -> z1(6) -> z2(5) -> z3(4) -> z4(1) -> z3(4)
+      const path=['z1','z2','z3','z4','z3'];
+      for(const id of path){
+        const to=E[id]; if(!to) continue;
+        await passBallTo(to, 560);
+        if(typeof ballCarrier!=='undefined') ballCarrier=to; if(typeof moveBallTo==='function') moveBallTo(to,'right');
+        PX.updateTeamLayering();
+        await pressNearest(to);
+        await delay(520);
+      }
     })();
   }
 
@@ -12646,12 +12735,16 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     steps.push(animatedWatch('Now White has six field players against Blue’s five. The very same situation has two names: for the attacking White it is a 6-on-5 — a “man-up” or power play; for the defending Blue it is a 5-on-6. White spreads into the power-play zones while Blue sets a 4-2 defense.',
       function(){ return sixOnFiveSetupDemo().then(()=>{ PX.flash('6-ON-5','good',1800); }); }));
 
-    // 5.4 YOU TRY — find the open player (the unmarked White centre).
+    // 5.4 — man-up ball movement: five perimeter passes, defenders sliding to block.
+    steps.push(animatedWatch('A player up, White works the ball around the perimeter — passing to the next man, over and over — to make the five defenders shift. Watch how the Blue defender nearest the ball always steps out to block the shooting lane (the shaded corridor), while the others hold the 4-2 shape.',
+      function(){ return manUpPassingDemo().then(()=>{ PX.flash('KEEP IT MOVING','good',1500); }); }));
+
+    // 5.5 YOU TRY — find the open player (the unmarked right centre, NEW zone 2).
     steps.push({
-      instruction:'With one fewer defender, one White attacker is unmarked. Find the open player near the goal and tap him.',
+      instruction:'All that ball movement has pulled the defense out of shape and left one White attacker open for a good shot. Find the open player and tap him.',
       bannerSide:'top', skipDimPhase:true, highlight:null,
       onEnter:function(){ PX._l5open=false; clearHoldCinematic();
-        openWhite = PX._l5openMan || whiteCenter() || whiteFields()[0];   // the second centre (zone 6), left unmarked by the 4-2
+        openWhite = PX._l5openMan || whiteCenter() || whiteFields()[0];   // NEW zone 2 (right centre), left open by the shift
         if(openWhite) spotlightCircle(+openWhite.dataset.x, +openWhite.dataset.y, 2.2, false);   // a soft hint around the open area
         PX.tap.arm({
           test:function(hit){ return !!(hit.player && openWhite && hit.player===openWhite); },
@@ -12666,12 +12759,12 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
         });
       },
       validate:{ type:'custom', fn:()=> PX._l5open===true },
-      autoComplete:function(){ PX.tap.disarm(); clearHoldCinematic(); const w=openWhite||whiteCenter();
+      autoComplete:function(){ PX.tap.disarm(); clearHoldCinematic(); const w=openWhite||PX._l5openMan||whiteCenter();
         if(w){ if(typeof passBallTo==='function') passBallTo(w,420); if(typeof ballCarrier!=='undefined') ballCarrier=w; if(typeof moveBallTo==='function') moveBallTo(w,'right'); }
         PX.flash('Correct — the open man is free in front of the goal','good'); setTimeout(()=>{ PX._l5open=true; }, 1400); }
     });
 
-    // 5.5 YOU TRY — the man-up shot (tap a corner + SHOOT -> goal; retry until it scores).
+    // 5.6 YOU TRY — the man-up shot (tap a corner + SHOOT -> goal; retry until it scores).
     function l5ArmShot(){
       const w=openWhite||PX._l5openMan||whiteCenter()||currentWhiteShooter();
       if(w){ if(typeof ballCarrier!=='undefined') ballCarrier=w; if(typeof moveBallTo==='function') moveBallTo(w,'right'); }
@@ -12683,7 +12776,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     steps.push({
       instruction:'The open player has a clear look. Tap a spot in the goal — close to a post, out of the keeper’s reach — then press SHOOT.',
       bannerSide:'top', skipDimPhase:true, highlight:null,
-      onEnter:function(){ PX._l5goal=false; clearHoldCinematic();
+      onEnter:function(){ PX._l5goal=false; clearHoldCinematic(); PX.clearShotBlocks();   // clear the blocking corridors before the shot
         PX.enterFrontCourt(); PX.followGoal('blue');
         l5ArmShot();
       },
@@ -12691,9 +12784,13 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       autoComplete:function(){ if(PX.shoot&&PX.shoot.cancel) PX.shoot.cancel(); PX.flash('GOAL! The power play pays off','goal'); setTimeout(()=>{ PX._l5goal=true; }, 1000); }
     });
 
-    // 5.6 wrap-up.
-    steps.push(watchLeadFlash('UNDERSTAND\n• Holding, sinking or pulling back a player WITHOUT the ball is an exclusion.\n• The excluded player leaves the water for 18 seconds — or sooner on a goal or a change of possession.\n• His team plays a man down: 6-on-5 for the attackers, 5-on-6 for the defenders.\n• A player up, the attack moves the ball to find the open man.\n• The power play is a big chance to score.',
-      'LESSON 5 COMPLETE', 'good', ()=>{ PX.followBall(false); const bn=document.getElementById('tutorialBanner'); if(bn) bn.classList.add('pxWide'); }));
+    // 5.7 — how the excluded player gets back in.
+    steps.push(watch('The excluded player can come back into the game as soon as ANY of these happens: a goal is scored, his team wins back possession of the ball, or his 18 seconds are up (handy when the shot clock still had more time on it). Whichever comes first ends the man-up.',
+      ()=>{ if(PX.stopLineBlink) PX.stopLineBlink(); }));
+
+    // 5.8 — the different kinds of exclusion (personal foul / with-substitution / brutality).
+    steps.push(watchLeadFlash('GOOD TO KNOW\n• An exclusion is also called a personal foul. Collect three personal fouls and you are out of the game (a substitute takes your place).\n• Exclusion with substitution: the player is out for good but CAN be replaced right away — usually for misconduct or a very rough foul.\n• Brutality (a 4-minute exclusion): the other team gets a penalty shot, the guilty player is out for the rest of the match, and his team must play a man down for a full 4 minutes of game time before a substitute may enter.',
+      'LESSON 5 COMPLETE', 'good', ()=>{ if(PX.clearShotBlocks) PX.clearShotBlocks(); PX.followBall(false); const bn=document.getElementById('tutorialBanner'); if(bn) bn.classList.add('pxWide'); }));
 
     return steps;
   };
@@ -12873,6 +12970,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     try{ PX.clearSelections(); }catch(e){}
     try{ qa('[data-px="goaltap"]').forEach(e=>e.remove()); }catch(e){}
     try{ if(PX.stopLineBlink) PX.stopLineBlink(); }catch(e){}   // clear any 2m/6m line blink
+    try{ if(PX.clearShotBlocks) PX.clearShotBlocks(); }catch(e){}   // drop any raised block arms / corridors (L5 man-up)
     try{ clearL4Overlays(); }catch(e){}                         // clear ball-line / free-throw arrow
     try{ PX._holdBox=false; }catch(e){}   // never leave the instruction box suppressed after a jump
     try{ if(PX.clearFlash) PX.clearFlash(); }catch(e){}
@@ -12911,6 +13009,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     try{ if(PX.hideShootButton) PX.hideShootButton(); }catch(e){}
     try{ if(PX.hideBallUnderZoom) PX.hideBallUnderZoom(); if(PX.hideGoalZoom) PX.hideGoalZoom(); }catch(e){}
     try{ if(PX.stopLineBlink) PX.stopLineBlink(); }catch(e){}   // drop any line-blink (2m red / 6m green) left running
+    try{ if(PX.clearShotBlocks) PX.clearShotBlocks(); }catch(e){}   // drop any raised block arms / shot-block corridors
     try{ clearL4Overlays(); }catch(e){}                         // drop the ball-line / free-throw arrow overlays
     try{ if(PX.clearShotClockHighlight) PX.clearShotClockHighlight(); }catch(e){}
     try{ PX.centerDuel(false); PX.setCenterDuel(null,null,null); }catch(e){}
