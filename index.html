@@ -12473,7 +12473,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     const steps=[];
 
     // 4.1 — frame the whistle + set the scene (White attacking the blue goal).
-    steps.push(watch('You will hear the referee’s whistle often. Most whistles are ordinary fouls — the most common, minor stoppages. The other team gets a free throw and nobody has to leave the pool. (A more serious foul, an exclusion, DOES send a player out — that’s the next lesson.)',
+    steps.push(watch('You will hear the referee’s whistle often. Most whistles are ordinary fouls — minor stoppages that give the other team a free throw, with nobody leaving the pool. A more serious foul, the exclusion, comes next lesson.',
       function(){
         PX.field.setPhase('lines'); PX.clearActors(); PX.ensureOffenseBoard();
         PX.centerDuel(false);   // hold the scene still while we explain
@@ -12484,12 +12484,12 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       }));
 
     // 4.2 — RE-ANCHOR the possession principle: attacking the ball-carrier is legal.
-    steps.push(animatedWatch('First, the key idea behind fouls: a player who is HOLDING the ball may be grabbed, held, even pushed under — and that is NOT a foul. Going hard for the ball, and for the player holding it, is completely allowed. (Only genuinely violent play would be punished.)',
+    steps.push(animatedWatch('First, the key idea: a player who is HOLDING the ball may be grabbed, held, even pushed under — that is NOT a foul. Going hard for the ball, and the player holding it, is allowed. Only truly violent play is punished.',
       function(){ return possessionOkDemo().then(()=>{ PX._leadFlash('THIS IS NOT A FOUL','good'); }); }));
 
     // 4.3 — ordinary foul #1 (the MOST COMMON): a defender fouls the shielding
     // ball-carrier as he releases the ball to a safe spot — a free throw.
-    steps.push(animatedWatch('An ordinary foul is a smaller, technical infringement. The most common one happens again and again in an attack: the ball-carrier is attacked, shields the ball with his body and releases it a short distance to a safe spot — and the referee whistles a foul, a free throw for his team.',
+    steps.push(animatedWatch('An ordinary foul is a smaller, technical infringement. The most common: the ball-carrier is attacked, shields the ball with his body and releases it a short distance — and the referee whistles a free throw for his team.',
       function(){ return drawnFoulDemo().then(()=>{ PX._leadFlash('ORDINARY FOUL',''); }); }));
 
     // 4.4 — ordinary foul #2: ball-under.
@@ -12501,15 +12501,15 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       function(){ return offsideDemo(); }));
 
     // 4.6 — the free throw: three options.
-    steps.push(animatedWatch('After an ordinary foul the fouled team takes a free throw. They have three choices: toss the ball up to put it back in play, pass it straight to a team-mate, or — when the ball is outside the 6-meter line (green) — shoot directly on the goal, no matter where the foul happened.',
+    steps.push(animatedWatch('After an ordinary foul the fouled team takes a free throw. Three choices: toss the ball up to restart play, pass it to a team-mate, or — from outside the 6-meter line (green) — shoot straight on the goal.',
       function(){ return freeThrowDemo(); }));
 
     // 4.7 — advantage / play on.
-    steps.push(watch('The referee doesn’t have to blow the whistle for every foul. If the attacking team is fouled but still has the ball and a good chance to score, stopping for the free throw would only take that chance away. So the referee lets the play go on instead — this is called playing the advantage.',
+    steps.push(watch('The referee doesn’t whistle every foul. If the fouled team still has the ball and a good chance to score, stopping for the free throw would only waste it. So he lets play go on — this is the advantage.',
       ()=>{ clearHoldCinematic(); clearL4Overlays(); }));   // no animation — just the explanation, cleaned of the offside overlays
 
     // 4.8 — wrap-up: LESSON 4 COMPLETE headline FIRST, then the recap box (wider).
-    steps.push(watchLeadFlash('UNDERSTAND\n• Attacking the ball, and the player holding it, is allowed — that is not a foul.\n• Ordinary fouls are smaller, technical infringements: most often a defender fouling the ball-carrier as he shields and releases the ball, plus the ball-under and 2-meter offside.\n• An ordinary foul gives the other team a free throw, and nobody leaves the pool.\n• A free throw can be tossed up, passed, or — from outside 6 m — shot straight on goal.\n• The referee can wave play on when whistling would only take away a clear chance (advantage).',
+    steps.push(watchLeadFlash('UNDERSTAND\n• Attacking the ball or its carrier is not a foul.\n• Ordinary fouls are minor: fouling the releasing carrier, the ball-under, and 2 m offside.\n• They give a free throw — nobody leaves. It is tossed, passed, or shot from outside 6 m.\n• The ref can wave play on to keep a clear chance — the advantage.',
       'LESSON 4 COMPLETE', 'good', ()=>{ if(PX.stopLineBlink) PX.stopLineBlink(); PX.followBall(false); const bn=document.getElementById('tutorialBanner'); if(bn) bn.classList.add('pxWide'); }));
 
     return steps;
@@ -12812,16 +12812,16 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       }));
 
     // 5.2 — the excluded player leaves the water.
-    steps.push(animatedWatch('An exclusion is a foul — a rule violation that counts as a personal foul on the player’s record. As a consequence he must leave the pool, waiting at his team’s re-entry area for 18 seconds — or sooner if his team wins the ball back or a goal is scored.',
+    steps.push(animatedWatch('An exclusion is a foul that counts as a personal foul on the player’s record. As a result he must leave the pool at his team’s re-entry area for 18 seconds — or sooner if his team wins the ball back or a goal is scored.',
       function(){ return excludedLeavesDemo(); }));
 
     // 5.3 — the numerical difference: 6-on-5 / 5-on-6. White sets up its power
     // play in the 6-on-5 zones; Blue drops into the 4-2 man-down defence.
-    steps.push(animatedWatch('Now White has six field players against Blue’s five. The very same situation has two names: for the attacking White it is a 6-on-5 — a “man-up” or power play; for the defending Blue it is a 5-on-6. White spreads into the power-play zones while Blue sets a 4-2 defense. (These numbered zones are unofficial — just a helpful way to picture where the players stand, not real markings painted in the pool.)',
+    steps.push(animatedWatch('Now White has six field players to Blue’s five: for White it is a 6-on-5, or “man-up”; for Blue, a 5-on-6. White spreads into the zones, Blue sets a 4-2 defense. (The numbered zones are unofficial — a guide, not real pool markings.)',
       function(){ return sixOnFiveSetupDemo().then(()=>{ PX.flash('6-ON-5','good',1800); }); }));
 
     // 5.4 — man-up ball movement: five perimeter passes, defenders sliding to block.
-    steps.push(animatedWatch('When playing 6-on-5, White tries to create a high-scoring opportunity by passing the ball around and making the defense shift around. For your better understanding of the defense, the shaded corridor shows the area a defender would cover with their blocking arm when it is out.',
+    steps.push(animatedWatch('When playing 6-on-5, White passes the ball around to make the defense shift and create a high-scoring chance. The shaded corridor shows the area a defender would cover with their blocking arm when it is out.',
       function(){ return manUpPassingDemo().then(()=>{ PX.flash('KEEP IT MOVING','good',1500); }); }));
 
     // 5.5 YOU TRY — find the open player (the unmarked right centre, NEW zone 2).
@@ -12870,7 +12870,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     });
 
     // 5.7 — how the excluded player gets back in.
-    steps.push(watch('The excluded player can come back into the game as soon as ANY of these happens: a goal is scored, his team wins back possession of the ball, or his 18 seconds are up (handy when the shot clock still had more time on it). Whichever comes first ends the man-up.',
+    steps.push(watch('The excluded player comes back as soon as ANY of these happens: a goal is scored, his team wins back the ball, or his 18 seconds are up. Whichever comes first ends the man-up.',
       ()=>{ if(PX.stopLineBlink) PX.stopLineBlink(); }));
 
     // 5.8a — personal fouls and the basic exclusion.
@@ -12878,15 +12878,16 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       ()=>{ if(PX.clearShotBlocks) PX.clearShotBlocks(); }));
 
     // 5.8b — the heavier variants and the bridge to penalties.
-    steps.push(watch('Some fouls are heavier. An exclusion with substitution puts a player out for good but lets a teammate replace him right away. A brutality — a 4-minute exclusion — gives the other team a penalty and removes the player for the match. And a foul right in front of the goal is a penalty shot — let’s look at one now.'));
+    steps.push(watch('Heavier fouls go further. Exclusion with substitution: out for good, but replaced at once. Brutality (a 4-minute exclusion): a penalty for the other team, and out for the match. A foul in front of goal can be a penalty — let’s see one.'));
 
     // 5.9 — the penalty foul: attacker facing goal, no defender between him and it.
-    steps.push(animatedWatch('Here the White center is 2.5 meters out, facing the goal with the ball — and the only thing between him and the goal is the keeper, no defender. When a defender fouls an attacker in that position — holding, sinking or pulling him back from behind — the referee awards a penalty, because a clear scoring chance is being taken away. And this is a penalty even though the White center is in possession of the ball.',
+    steps.push(animatedWatch('The White center is 2.5 m out, facing the goal with the ball — only the keeper between him and the goal. A foul from behind here is a penalty: it takes away a clear scoring chance. And it counts even though he is in possession of the ball.',
       function(){ return penaltyFoulDemo().then(()=>{ PX._leadFlash('PENALTY','whistle'); }); }));
 
-    // 5.9b — the other common ways a penalty is given.
-    steps.push(watch('Penalties are given other ways too. Inside the 6-meter area, if an attacker — often the center — has a good chance to score and a defender stops it with a foul as he shoots or releases the ball (or even before he gets the ball), that is a penalty. And the goalkeeper has a special rule: if he is being attacked and takes the ball under water inside his own 6-meter area, the other team gets a penalty — though on his own, with no attacker on him, taking the ball under is fine.',
+    // 5.9b — the other common ways a penalty is given (split into two boxes).
+    steps.push(watch('Penalties happen other ways too. Inside the 6-meter area, if an attacker with a good chance to score is stopped by a foul — as he shoots, releases the ball, or even before he gets it — that is a penalty.',
       ()=>{ if(PX.stopLineBlink) PX.stopLineBlink(); }));
+    steps.push(watch('The goalkeeper has a special rule too: if he is being attacked and takes the ball under water inside his own 6-meter area, the other team gets a penalty. On his own, with no attacker on him, taking the ball under is fine.'));
 
     // 5.10 — set up the penalty at the 5-meter line.
     steps.push(animatedWatch('A penalty is taken from the 5-meter line, with only the goalkeeper to beat — everyone else clears out. It is one of the very best chances to score in the whole game.',
@@ -12912,6 +12913,69 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     // 5.12 wrap-up.
     steps.push(watchLeadFlash('UNDERSTAND\n• Fouling a player WITHOUT the ball is an exclusion: 18 seconds out, and a man-up for his team.\n• A player up, move the ball, find the open man, score.\n• A foul in front of the goal can be a penalty — even on a player WITH the ball.\n• A penalty is a shot from 5 meters, keeper only.\n• Exclusions and penalties are two kinds of personal foul.',
       'LESSON 5 COMPLETE', 'good', ()=>{ if(PX.clearShotBlocks) PX.clearShotBlocks(); if(PX.stopLineBlink) PX.stopLineBlink(); PX.followBall(false); const bn=document.getElementById('tutorialBanner'); if(bn) bn.classList.add('pxWide'); }));
+
+    return steps;
+  };
+
+  /* =====================================================================
+     LESSON 6 — WATCHING THE GAME (round-up capstone)
+     Positions -> the counterattack (fast break) -> settling into the set
+     offense -> how a match ends. Calm, mostly-watch pace; no drills.
+     ===================================================================== */
+  // The fast break: Blue wins the ball and races the whole pool toward the
+  // white goal, White turning to chase a step behind.
+  function counterAttackDemo(){
+    return (async function(){
+      stopFollow(); clearHoldCinematic(); PX.centerDuel(false); if(PX.setCenterDuel) PX.setCenterDuel(null,null,null);
+      if(PX.blendOutZones) PX.blendOutZones();
+      const blues=blueFields(), whites=whiteFields();
+      if(!blues.length) return;
+      const lead = blues.find(b=>b!==blueCenter()) || blues[0];   // a perimeter Blue leads; the centre trails
+      if(lead && typeof moveBallTo==='function'){ if(typeof ballCarrier!=='undefined') ballCarrier=lead; moveBallTo(lead,'left'); PX.updateTeamLayering(); }
+      PX.exitFrontCourt(); PX._viewBias=0; PX.followBall(true);   // show the whole pool for the length-of-pool break
+      PX.flash('BLUE WINS THE BALL','good',1200);
+      await delay(800);
+      const ys=[6,9,12,15,18,12];
+      const anims=[];
+      blues.forEach((b,i)=>{ const tx=(b===lead)?20:17.5; anims.push(swim(b, {x:tx, y:ys[i%ys.length]}, 3400, 'h')); });   // Blue races +x
+      whites.forEach((w,i)=>{ anims.push(swim(w, {x:15, y:ys[i%ys.length]}, 3400, 'h')); });                                // White chases behind
+      const wgk=whiteGoalie(); if(wgk) anims.push(swimSettle(wgk, {x:WHITE_GOAL.x-0.7, y:CY}, 3400, 270, 'v'));             // white keeper drops into his goal
+      const bgk=blueGoalie(); if(bgk) anims.push(swimSettle(bgk, {x:BLUE_GOAL.x+2, y:CY}, 3400, 90, 'h'));                  // blue keeper trails up
+      await Promise.all(anims);
+      PX.flash('FAST BREAK','good',1400);
+      await delay(400);
+    })();
+  }
+
+  PX.buildLesson6Steps = function(){
+    const steps=[];
+
+    // 6.1 — positions & roles.
+    steps.push(animatedWatch('Each team has a goalkeeper in the goal and six field players. One — the center — sets up right in front of the goal, where much of the battle happens. The other five spread around the perimeter to pass, drive and shoot.',
+      function(){
+        PX.field.setPhase('lines'); PX.clearActors(); PX.ensureOffenseBoard();
+        PX.centerDuel(false); if(PX.setCenterDuel) PX.setCenterDuel(null,null,null);
+        PX.enterFrontCourt(); PX.followGoal('blue');
+        if(!document.getElementById('pxRefTop')) PX.showReferees(); PX.startRefTracking();
+        const c=whiteCenter(); if(c) spotlightCircle(+c.dataset.x, +c.dataset.y, 2.3, false);
+        return delay(1500).then(()=>{ PX.flash('THE CENTER','good',1400); });
+      }));
+
+    // 6.2 — the counterattack (fast break).
+    steps.push(animatedWatch('The moment a team wins the ball — a save, a block, a steal — they race the other way. This counterattack is water polo’s fast break: get down the pool and try to score before the defense can get back and set up.',
+      function(){ return counterAttackDemo(); }));
+
+    // 6.3 — settle into the set offense.
+    steps.push(animatedWatch('If the fast break doesn’t score, the team sets up. They spread into position around the goal, keep possession, and patiently move the ball to pull the defense apart until a good shot opens — the set offense.',
+      function(){ return PX.setupWhiteHalf().then(()=>{ PX.centerDuel(false); PX.flash('SET OFFENSE','good',1400); }); }));
+
+    // 6.4 — how a game ends.
+    steps.push(watchLeadFlash('A match is four quarters. A clock counts down each one; when it reaches zero in the last quarter, the game ends and the team with more goals wins. If the score is tied, some competitions add extra time or a shoot-out.',
+      'FULL TIME', 'good'));
+
+    // 6.5 — round-up / you’re ready.
+    steps.push(watchLeadFlash('YOU NOW KNOW THE GAME\n• The players and their positions, and who is on offense.\n• The shot clock, and how possession changes.\n• Ordinary fouls, exclusions and penalties.\n• The counterattack, the set offense, and how a match is won.\nEnjoy watching your player — you’re ready!',
+      'YOU’RE READY!', 'good', ()=>{ if(PX.stopLineBlink) PX.stopLineBlink(); PX.followBall(false); const bn=document.getElementById('tutorialBanner'); if(bn) bn.classList.add('pxWide'); }));
 
     return steps;
   };
@@ -13144,26 +13208,22 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     // Lessons 2 & 3 both open from the offense/defense board on the field — build it
     // fresh so the players are correctly set up (a stale 12-player board would have
     // made ensureOffenseBoard's guard no-op and left them where the last step left them).
+    // Stop any position-watchdog left over from an earlier prime.
+    if(PX._primeWatch){ try{ clearInterval(PX._primeWatch); }catch(e){} PX._primeWatch=null; }
     if(lesson>=1){
+      // EMPTY THE FULL FIELD so nothing from the skipped scene can survive. The
+      // lesson's OWN first step — run synchronously right after this in
+      // goToTutorialStep — then rebuilds its exact starting formation from scratch and
+      // shows the first instruction. Because the field is empty and every in-flight
+      // tween was just cancelled (bumped _animGen) and only references now-removed
+      // players, the start never depends on what the screen was doing when the parent
+      // skipped — and no watchdog is needed to fight the lesson's own opening animation.
       PX.clearActors(); if(PX.clearReferees) PX.clearReferees();
       PX.field.setPhase('lines');
-      PX.ensureOffenseBoard();
-      try{ PX.centerDuel(false); }catch(e){}   // hold the intro still; the lesson's own setup re-enables the duel
+      try{ PX.centerDuel(false); }catch(e){}
       PX._swimDone=true; PX._setupDone=true;
       if(lesson>=2){ PX.enterFrontCourt(); } else if(PX.exitFrontCourt){ PX.exitFrontCourt(); }
-      PX.hideShotClock();
-      // Watchdog: for ~2.4s, re-assert the freshly-primed positions while we're still
-      // on the lesson's FIRST step — a guaranteed backstop so NO stray animation from
-      // the previous lesson can nudge the scene before the new lesson plays.
-      const snap=[...document.querySelectorAll('.player')].map(e=>({el:e,x:+e.dataset.x,y:+e.dataset.y,pose:e.dataset.pose,rot:+e.dataset.rot||0}));
-      const gen=PX._animGen, home=startIdx; let ticks=0, reached=false;
-      if(PX._primeWatch){ clearInterval(PX._primeWatch); PX._primeWatch=null; }
-      PX._primeWatch=setInterval(function(){ ticks++;
-        const si=(typeof tutorialStepIndex!=='undefined')?tutorialStepIndex:home;
-        if(si===home) reached=true;
-        if(PX._animGen!==gen || ticks>18 || (reached && si!==home)){ clearInterval(PX._primeWatch); PX._primeWatch=null; return; }
-        snap.forEach(s=>{ if(!s.el.isConnected) return; s.el.dataset.x=s.x; s.el.dataset.y=s.y; s.el.dataset.pose=s.pose; s.el.dataset.rot=s.rot; if(typeof place==='function') place(s.el); });
-      }, 130);
+      if(PX.hideShotClock) PX.hideShotClock();
     }
   };
   PX.nextLesson = function(){
@@ -13174,7 +13234,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     else PX.flash('That’s the last lesson so far','',2000);
   };
   // Lesson names for the jump-to-lesson picker (index matches _lessonStarts).
-  PX._lessonTitles = ['Lesson 1 — The Pool & the Players','Lesson 2 — How the Game Works','Lesson 3 — Possession & the Shot Clock','Lesson 4 — Ordinary Fouls','Lesson 5 — Exclusions & Penalties'];
+  PX._lessonTitles = ['Lesson 1 — The Pool & the Players','Lesson 2 — How the Game Works','Lesson 3 — Possession & the Shot Clock','Lesson 4 — Ordinary Fouls','Lesson 5 — Exclusions & Penalties','Lesson 6 — Watching the Game'];
   // Which lesson the current step belongs to (0-based).
   PX.currentLesson = function(){
     const starts=PX._lessonStarts||[0];
@@ -13258,9 +13318,9 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     PX._viewBias=0;
     PX._swimDone=false; PX._setupDone=false; PX._gkTapped=false; PX._zonesActive=false; PX._holdBox=false; PX._snapshots={};
     PX.hideShotClock(); PX.followBall(false); PX.centerDuel(false); PX.setCenterDuel(null,null,null);
-    const l1=PX.buildLesson1Steps(), l2=PX.buildLesson2Steps(), l3=PX.buildLesson3Steps(), l4=PX.buildLesson4Steps(), l5=PX.buildLesson5Steps();
-    PX._lessonStarts=[0, l1.length, l1.length+l2.length, l1.length+l2.length+l3.length, l1.length+l2.length+l3.length+l4.length];   // L2 / L3 / L4 / L5 offsets
-    const allSteps = wrapBannerReset([].concat(l1, l2, l3, l4, l5));
+    const l1=PX.buildLesson1Steps(), l2=PX.buildLesson2Steps(), l3=PX.buildLesson3Steps(), l4=PX.buildLesson4Steps(), l5=PX.buildLesson5Steps(), l6=PX.buildLesson6Steps();
+    PX._lessonStarts=[0, l1.length, l1.length+l2.length, l1.length+l2.length+l3.length, l1.length+l2.length+l3.length+l4.length, l1.length+l2.length+l3.length+l4.length+l5.length];   // L2 / L3 / L4 / L5 / L6 offsets
+    const allSteps = wrapBannerReset([].concat(l1, l2, l3, l4, l5, l6));
     if(typeof startTutorial==='function'){
       startTutorial(allSteps, { onComplete:function(){ PX.hideNav(); PX.showWpEnd('complete'); } });
     }
