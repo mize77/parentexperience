@@ -13098,6 +13098,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       if(typeof ballCarrier!=='undefined') ballCarrier=null;
       const kx=wg?+wg.dataset.x:(WHITE_GOAL.x-0.6), ky=wg?+wg.dataset.y:CY;
       const blockPt={ x:kx-0.35, y: from.y+(ky-from.y)*0.8 };
+      PX._l6outSide = (from.y<=CY) ? 'top' : 'bottom';              // remember the side for the corner throw
       tween((x,y)=>{ if(typeof ball!=='undefined'&&ball){ ball.dataset.x=x; ball.dataset.y=y; if(typeof placeBall==='function') placeBall(); } if(wg){ wg.dataset.rot=faceTo(+wg.dataset.x,+wg.dataset.y,x,y); if(typeof place==='function') place(wg); } }, from, blockPt, 430, ()=>{
         const outY = from.y<=CY ? 9.3 : 14.7;                       // deflected out beside the goal, past the near post
         tween((x,y)=>{ if(typeof ball!=='undefined'&&ball){ ball.dataset.x=x; ball.dataset.y=y; if(typeof placeBall==='function') placeBall(); } }, blockPt, {x:27.7, y:outY}, 470, ()=>{
@@ -13156,20 +13157,35 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       await PX.setupWhiteHalf();                                    // regular offensive positions (Blue attacking the white goal)
       PX.centerDuel(false); if(PX.setCenterDuel) PX.setCenterDuel(null,null,null);
       PX.enterFrontCourt(); PX.followGoal('white');
-      // The play restarts with one Blue at the 2 m corner mark (the side the ball went
-      // out, y≈9.5), facing the goal, ball in his RIGHT hand.
-      const starter = blueByCap(2) || blueFields()[0];
+      // A corner throw is taken from the 2 m mark right next to the sideline, on the side
+      // the ball went out (upper side here). The taker + one defender are the pair that
+      // would otherwise sit in the field zone closest to that corner, so we move exactly
+      // that pair to the corner: taker on the sideline 2 m mark facing the goal (ball in
+      // his right hand), his defender a touch goal-side of him.
+      const topSide = (PX._l6outSide!=='bottom');
+      const cornerPt = { x: WHITE_GOAL.x - 2, y: topSide ? (M.fieldY + 1.6) : (M.fieldY + M.fieldH - 1.6) };
+      const starter = blueFields().slice().sort((a,b)=>
+        Math.hypot((+a.dataset.x)-cornerPt.x,(+a.dataset.y)-cornerPt.y) - Math.hypot((+b.dataset.x)-cornerPt.x,(+b.dataset.y)-cornerPt.y))[0] || blueFields()[0];
+      const starterDef = starter ? nearestWhite(starter) : null;
       if(starter){
-        starter.dataset.pose='v'; starter.dataset.x=25; starter.dataset.y=9.5;
-        starter.dataset.rot=faceTo(25,9.5, WHITE_GOAL.x, WHITE_GOAL.y);
+        starter.dataset.pose='v'; starter.dataset.x=cornerPt.x; starter.dataset.y=cornerPt.y;
+        starter.dataset.rot=faceTo(cornerPt.x,cornerPt.y, WHITE_GOAL.x, WHITE_GOAL.y);
         if(typeof place==='function') place(starter);
         if(typeof ballCarrier!=='undefined') ballCarrier=starter;
         if(typeof moveBallTo==='function') moveBallTo(starter,'right');
-        PX.updateTeamLayering();
       }
+      if(starterDef){
+        const dx=WHITE_GOAL.x-cornerPt.x, dy=WHITE_GOAL.y-cornerPt.y, dl=Math.hypot(dx,dy)||1;
+        starterDef.dataset.pose='v';
+        starterDef.dataset.x = cornerPt.x + dx/dl*1.4; starterDef.dataset.y = cornerPt.y + dy/dl*1.4;   // goal-side of the taker
+        starterDef.dataset.rot = faceTo(+starterDef.dataset.x,+starterDef.dataset.y, cornerPt.x, cornerPt.y);
+        if(typeof place==='function') place(starterDef);
+      }
+      PX.updateTeamLayering();
       // Work the ball to the shooter (Blue #4). White #4 is the defender who steps
       // goal-side of him with a raised arm, so the shot later deflects off HIM.
-      const shooter = blueByCap(4) || blueFields().find(b=>b!==starter) || starter;
+      let shooter = blueByCap(4) || blueFields().find(b=>b!==starter) || starter;
+      if(shooter===starter) shooter = blueFields().find(b=>b!==starter) || starter;
       const seq=[ blueByCap(6), shooter ].filter(Boolean).filter(p=>p!==starter);
       let holder=starter;
       for(const t of seq){
@@ -13609,7 +13625,12 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     // Host-provided integration handlers take priority when present.
     if(opts.mode==='tracking' && typeof PX.onStartGameTracking==='function'){ try{ PX.onStartGameTracking(); return; }catch(_){} }
     if(opts.mode==='board' && typeof PX.onUseTacticalBoard==='function'){ try{ PX.onUseTacticalBoard(); return; }catch(_){} }
-    if(opts.mode==='tracking'){ try{ if(PX.flash) PX.flash('Game Tracking opens here in xquiX Studio','',2400); }catch(_){} }
+    if(opts.mode==='tracking'){
+      // The revealed studio header defaults to the app name ("XquiX Studio by MIZE") —
+      // give the Game-Tracking hand-off its own headline instead.
+      try{ const h1=document.querySelector('header h1'); if(h1) h1.textContent='Game Tracking'; }catch(_){}
+      try{ if(PX.flash) PX.flash('Game Tracking opens here in xquiX Studio','',2400); }catch(_){}
+    }
   };
   // Overridable entry points for the two free-version parent features.
   PX.startGameTracking = function(){ PX.exitToStudio({ mode:'tracking' }); };
