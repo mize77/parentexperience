@@ -13551,10 +13551,15 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       b.style.cssText=css+';pointer-events:auto;touch-action:manipulation;';
       const h=function(ev){ if(ev){ ev.preventDefault(); ev.stopPropagation(); } if(b._pxLock) return; b._pxLock=true; fn(); };
       b.addEventListener('pointerup',h); b.addEventListener('click',h); return b; };
-    row.appendChild(dlgBtn('Restart tutorial','font:800 18px system-ui;color:#fff;background:#1b7373;border:2px solid #4bb8bd;border-radius:999px;padding:14px 34px;cursor:pointer', ()=>{ ov.remove(); PX.restartWp(); }));
+    // "Keep going" (return to the tutorial) is the bright primary on the mid-tutorial
+    // exit dialog. The two free-version studio features (they open the live xquiX Studio
+    // once integrated) are offered on BOTH dialogs, then the option to replay/restart.
     if(kind!=='complete'){
       row.appendChild(dlgBtn('Keep going','font:800 18px system-ui;color:#0b2b2b;background:#4bb8bd;border:none;border-radius:999px;padding:14px 34px;cursor:pointer', ()=>{ ov.remove(); PX.showNav(); }));
     }
+    row.appendChild(dlgBtn('Start Game Tracking','font:800 18px system-ui;color:#0b2b2b;background:#7fd6da;border:none;border-radius:999px;padding:14px 30px;cursor:pointer', ()=>{ ov.remove(); PX.startGameTracking(); }));
+    row.appendChild(dlgBtn('Use Tactical Board','font:800 18px system-ui;color:#0b2b2b;background:#7fd6da;border:none;border-radius:999px;padding:14px 30px;cursor:pointer', ()=>{ ov.remove(); PX.useTacticalBoard(); }));
+    row.appendChild(dlgBtn('Restart tutorial','font:800 18px system-ui;color:#fff;background:#1b7373;border:2px solid #4bb8bd;border-radius:999px;padding:14px 34px;cursor:pointer', ()=>{ ov.remove(); PX.restartWp(); }));
     ov.appendChild(row);
 
     // ---- Jump-to-lesson picker: a drop-down of every lesson (defaults to the
@@ -13585,6 +13590,30 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     PX.clearActors(); PX.clearReferees();
     PX.showStartScreen(beginLessons);   // back to "Water Polo made easy" start screen
   };
+  // Hand the parent off from the finished tutorial into the live MIZE / xquiX Studio.
+  // Once the tutorial is embedded in xquiX Studio, the host assigns PX.onStartGameTracking
+  // / PX.onUseTacticalBoard to open its real Game-Tracking / Tactical-Board views. Running
+  // standalone we simply tear down the tutorial's parent-mode lock so the full studio board
+  // becomes usable, and (for tracking, which has no standalone view yet) leave a short note.
+  PX.exitToStudio = function(opts){
+    opts=opts||{};
+    const e=document.getElementById('pxEndScreen'); if(e) e.remove();
+    PX.hideNav(); PX.hideShotClock(); PX.followBall(false);
+    try{ if(PX.clearRedRing) PX.clearRedRing(); }catch(_){}
+    try{ if(PX.clearFlash) PX.clearFlash(); }catch(_){}
+    try{ if(typeof tutorialModeActive!=='undefined' && tutorialModeActive && typeof exitTutorial==='function') exitTutorial(); }catch(_){}
+    try{ PX.clearReferees(); }catch(_){}
+    try{ PX.exitFrontCourt(); }catch(_){}
+    try{ if(PX.field && PX.field.setPhase) PX.field.setPhase('lines'); }catch(_){}
+    document.body.classList.remove('pxParentMode','pxTouch','guestExperienceActive');   // reveal the full studio controls
+    // Host-provided integration handlers take priority when present.
+    if(opts.mode==='tracking' && typeof PX.onStartGameTracking==='function'){ try{ PX.onStartGameTracking(); return; }catch(_){} }
+    if(opts.mode==='board' && typeof PX.onUseTacticalBoard==='function'){ try{ PX.onUseTacticalBoard(); return; }catch(_){} }
+    if(opts.mode==='tracking'){ try{ if(PX.flash) PX.flash('Game Tracking opens here in xquiX Studio','',2400); }catch(_){} }
+  };
+  // Overridable entry points for the two free-version parent features.
+  PX.startGameTracking = function(){ PX.exitToStudio({ mode:'tracking' }); };
+  PX.useTacticalBoard  = function(){ PX.exitToStudio({ mode:'board' }); };
   // "Exit tutorial" opens a small dialog (Restart / Keep going / Move to next
   // lesson) WITHOUT tearing down the engine, so "Keep going" and "Move to next
   // lesson" both still work. Only "Restart" actually ends the run.
