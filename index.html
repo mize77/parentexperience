@@ -13539,7 +13539,9 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     if(PX.tts && PX.tts.supported){
       const vb=make('button'); vb.id='pxTtsBtn';
       vb.style.cssText='font:700 11px system-ui;color:#fff;background:#1a6363;border:none;border-radius:8px;padding:5px 12px;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.28);text-align:left;touch-action:manipulation;pointer-events:auto;';
-      const vh=function(ev){ if(ev){ ev.preventDefault(); ev.stopPropagation(); } PX.tts._unlock(); PX.tts.toggle(); if(PX._highlightTtsBtn) PX._highlightTtsBtn(false); };
+      const vh=function(ev){ if(ev){ ev.preventDefault(); ev.stopPropagation(); }
+        if(vb._pxLock) return; vb._pxLock=true; setTimeout(()=>{ vb._pxLock=false; }, 600);   // debounce: a touch fires pointerup AND click — without this the double-fire toggles voice on then straight back off
+        PX.tts._unlock(); PX.tts.toggle(); if(PX._highlightTtsBtn) PX._highlightTtsBtn(false); };
       vb.addEventListener('pointerup',vh); vb.addEventListener('click',vh);
       nav.appendChild(vb);
     }
