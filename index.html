@@ -10398,8 +10398,64 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   // up before an animation) while a deliberate REVEAL after the animation fades in.
   function boxHide(){ const bn=document.getElementById('tutorialBanner'); if(!bn) return; clearTimeout(PX._bannerT); bn.style.setProperty('transition','none','important'); bn.style.opacity='0'; }
   function boxShowNow(){ const bn=document.getElementById('tutorialBanner'); if(!bn) return; clearTimeout(PX._bannerT); bn.style.setProperty('transition','none','important'); bn.style.opacity='1'; }
-  function boxRevealFade(delay){ clearTimeout(PX._bannerT); PX._bannerT=setTimeout(function(){ const bn=document.getElementById('tutorialBanner'); if(bn){ bn.style.setProperty('transition','opacity .4s ease','important'); bn.style.opacity='1'; } }, delay||0); }
+  function boxRevealFade(delay){ clearTimeout(PX._bannerT); PX._bannerT=setTimeout(function(){ const bn=document.getElementById('tutorialBanner'); if(bn){ bn.style.setProperty('transition','opacity .4s ease','important'); bn.style.opacity='1'; } try{ PX._speakCurrentInstruction && PX._speakCurrentInstruction(); }catch(e){} }, delay||0); }
   PX._boxHide=boxHide; PX._boxShowNow=boxShowNow; PX._boxRevealFade=boxRevealFade;
+
+  /* ------------------------------------------------------------ VOICEOVER (TTS)
+     Reads the instruction box aloud with the browser's built-in speech synthesis
+     — no audio files, no network, works offline, and covers every lesson (incl.
+     future ones) automatically because it just reads the current box text. A
+     speaker toggle in the nav mutes/unmutes; default ON. */
+  PX.tts = (function(){
+    const supported = (typeof window!=='undefined') && ('speechSynthesis' in window) && (typeof SpeechSynthesisUtterance!=='undefined');
+    let enabled = true, unlocked = false, voice = null;
+    function pickVoice(){
+      try{
+        const vs = window.speechSynthesis.getVoices()||[]; if(!vs.length) return;
+        const score = v => { let s=0; const n=((v.name||'')+' '+(v.lang||''));
+          if(/^en[-_]/i.test(v.lang||'')) s+=5; else if(/en/i.test(v.lang||'')) s+=3;
+          if(/en[-_]us/i.test(v.lang||'')) s+=1;
+          if(/google|natural|neural|premium|enhanced|samantha|aria|jenny|libby/i.test(n)) s+=3;
+          return s; };
+        voice = vs.slice().sort((a,b)=>score(b)-score(a))[0] || vs[0];
+      }catch(e){}
+    }
+    function forSpeech(t){ return String(t||'')
+        .replace(/[•▶★–—]/g,' ').replace(/\s*\n\s*/g,'. ').replace(/\s{2,}/g,' ').replace(/\.\s*\./g,'.').trim(); }
+    function stop(){ if(!supported) return; try{ window.speechSynthesis.cancel(); }catch(e){} }
+    function speak(text){
+      if(!supported || !enabled || !unlocked) return;
+      const say = forSpeech(text); if(!say) return;
+      try{
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(say);
+        if(!voice) pickVoice(); if(voice) u.voice = voice;
+        u.rate=1.0; u.pitch=1.0; u.volume=1.0; u.lang=(voice&&voice.lang)||'en-US';
+        window.speechSynthesis.speak(u);
+      }catch(e){}
+    }
+    function unlock(){
+      if(!supported || unlocked) return; unlocked = true;
+      try{ const u=new SpeechSynthesisUtterance(' '); u.volume=0; window.speechSynthesis.speak(u); }catch(e){}   // warm-up unlocks iOS autoplay
+      try{ PX._speakCurrentInstruction && PX._speakCurrentInstruction(true); }catch(e){}
+    }
+    function setEnabled(on){ enabled=!!on; if(!enabled){ stop(); } else { unlocked=true; try{ PX._speakCurrentInstruction && PX._speakCurrentInstruction(true); }catch(e){} } if(PX._updateTtsBtn) PX._updateTtsBtn(); }
+    if(supported){ try{ window.speechSynthesis.onvoiceschanged = pickVoice; pickVoice(); }catch(e){} }
+    return { supported, speak, stop, setEnabled, toggle:()=>setEnabled(!enabled), isEnabled:()=>enabled, _unlock:unlock, _pickVoice:pickVoice };
+  })();
+  // Speak the current instruction box — once per step, and only while it is actually
+  // visible to the reader (so animated steps read AFTER their reveal, not during).
+  PX._speakCurrentInstruction = function(force){
+    if(!PX.tts || !PX.tts.supported || !PX.tts.isEnabled()) return;
+    if(!force && PX._ttsSpokenForStep) return;
+    const bn=document.getElementById('tutorialBanner'), el=document.getElementById('tutorialInstruction');
+    if(!bn || !el) return;
+    const cs=getComputedStyle(bn);
+    if(cs.visibility==='hidden' || parseFloat(cs.opacity||'1') <= 0.5) return;   // box not shown yet
+    const t=(el.textContent||'').trim(); if(!t) return;
+    PX._ttsSpokenForStep = true;
+    PX.tts.speak(t);
+  };
   PX.flash = function(text, kind){
     PX._flashQueue.push({ text:text, kind:kind });
     if(!PX._flashBusy) _processFlash();
@@ -11150,7 +11206,11 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   function wrapBannerReset(steps){
     steps.forEach(s=>{ const orig=s.onEnter; s.onEnter=function(){
       PX._manualScroll=false;   // every step re-activates auto-positioning (until the parent swipes again)
-      const bn=document.getElementById('tutorialBanner'); if(bn){ boxShowNow(); bn.classList.remove('pxWide'); } if(typeof orig==='function') orig.call(this); }; });
+      PX._ttsSpokenForStep=false; if(PX.tts) PX.tts.stop();   // new step -> stop prior voiceover, allow a fresh read
+      const bn=document.getElementById('tutorialBanner'); if(bn){ boxShowNow(); bn.classList.remove('pxWide'); } if(typeof orig==='function') orig.call(this);
+      // Plain watch steps keep the box visible from here, so read once onEnter has
+      // settled; animated steps hid the box in onEnter and will read on their reveal.
+      setTimeout(function(){ try{ PX._speakCurrentInstruction && PX._speakCurrentInstruction(); }catch(e){} }, 0); }; });
     return steps;
   }
   // Open a lesson with a "LESSON X — TITLE" headline (mirrors the "LESSON X COMPLETE"
@@ -13451,12 +13511,25 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       b.style.cssText='font:700 11px system-ui;color:#fff;background:'+bg+';border:none;border-radius:8px;padding:5px 12px;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.28);text-align:left;touch-action:manipulation;pointer-events:auto;';
       const h=function(ev){ if(ev){ ev.preventDefault(); ev.stopPropagation(); } if(b._pxLock) return; b._pxLock=true; setTimeout(()=>{ b._pxLock=false; }, 600); if(typeof fn==='function') fn(); };
       b.addEventListener('pointerup',h); b.addEventListener('click',h); return b; };
+    // Voice on/off toggle (only when speech synthesis is available). Sits above the
+    // Exit / Next controls so parents can mute the narration at any time.
+    if(PX.tts && PX.tts.supported){
+      const vb=make('button'); vb.id='pxTtsBtn';
+      vb.style.cssText='font:700 11px system-ui;color:#fff;background:#1a6363;border:none;border-radius:8px;padding:5px 12px;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.28);text-align:left;touch-action:manipulation;pointer-events:auto;';
+      const vh=function(ev){ if(ev){ ev.preventDefault(); ev.stopPropagation(); } PX.tts._unlock(); PX.tts.toggle(); };
+      vb.addEventListener('pointerup',vh); vb.addEventListener('click',vh);
+      nav.appendChild(vb);
+    }
     nav.appendChild(mk('Exit / Skip Lesson','#8a3a3a', PX.exitWp));
     // Next does the step's expected action (so the parent always sees it happen),
     // then the tutorial advances on its own.
     nav.appendChild(mk('Next step →','#37474f', PX.nextStep));
     document.body.appendChild(nav);
+    if(PX._updateTtsBtn) PX._updateTtsBtn();
   };
+  PX._updateTtsBtn = function(){ const b=document.getElementById('pxTtsBtn'); if(!b || !PX.tts) return;
+    const on=PX.tts.isEnabled(); b.textContent = on?'🔊 Voice: on':'🔇 Voice: off'; b.style.opacity = on?'1':'.7';
+    b.title = on?'Voice instructions on — tap to mute':'Voice instructions off — tap to unmute'; };
   // Clean up any live interaction (shoot / tap / choice / goal-zoom / follow /
   // selection / flash) so jumping between steps never leaves a widget behind.
   PX._cleanupStepUI = function(){
@@ -13474,6 +13547,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     try{ clearL4Overlays(); }catch(e){}                         // clear ball-line / free-throw arrow
     try{ PX._holdBox=false; }catch(e){}   // never leave the instruction box suppressed after a jump
     try{ if(PX.clearFlash) PX.clearFlash(); }catch(e){}
+    try{ if(PX.tts) PX.tts.stop(); }catch(e){}   // silence any in-flight voiceover on a step jump
   };
   // Escape hatch — the current step is never a dead end: advance one step so the
   // parent is never stuck if a drag or tap does not register.
@@ -13619,7 +13693,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   };
   PX.restartWp = function(){
     const e=document.getElementById('pxEndScreen'); if(e) e.remove();
-    PX.hideNav(); PX.hideShotClock(); PX.followBall(false);
+    PX.hideNav(); PX.hideShotClock(); PX.followBall(false); try{ if(PX.tts) PX.tts.stop(); }catch(_){}
     if(typeof tutorialModeActive!=='undefined' && tutorialModeActive && typeof exitTutorial==='function') exitTutorial();
     PX.clearActors(); PX.clearReferees();
     PX.showStartScreen(beginLessons);   // back to "Water Polo made easy" start screen
@@ -13633,6 +13707,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     opts=opts||{};
     const e=document.getElementById('pxEndScreen'); if(e) e.remove();
     PX.hideNav(); PX.hideShotClock(); PX.followBall(false);
+    try{ if(PX.tts) PX.tts.stop(); }catch(_){}   // stop the voiceover before handing off to the studio
     try{ if(PX.clearRedRing) PX.clearRedRing(); }catch(_){}
     try{ if(PX.clearFlash) PX.clearFlash(); }catch(_){}
     try{ if(typeof tutorialModeActive!=='undefined' && tutorialModeActive && typeof exitTutorial==='function') exitTutorial(); }catch(_){}
@@ -13684,6 +13759,9 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       if(typeof waitForStudioInitialization==='function') await waitForStudioInitialization();
       if(typeof waitForIntroAnimation==='function') await waitForIntroAnimation();
       injectBannerCss(); document.body.classList.add('pxParentMode');
+      // Unlock speech synthesis on the first user gesture (iOS requires a gesture);
+      // once unlocked, the current instruction reads automatically.
+      try{ document.addEventListener('pointerdown', function(){ if(PX.tts) PX.tts._unlock(); }, { once:true, capture:true }); }catch(e){}
       if(typeof isTouchDevice==='function' && isTouchDevice()) document.body.classList.add('pxTouch');   // phone/tablet layout: banner top-left
       PX.reverseZoneNumbers();   // perimeter 1–5 so the defending goalie has zone 1 on his RIGHT, zone 5 on his LEFT
       PX.field.setPhase('water');           // keep the field hidden behind the start screen
