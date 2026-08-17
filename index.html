@@ -10421,7 +10421,13 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       }catch(e){}
     }
     function forSpeech(t){ return String(t||'')
-        .replace(/[•▶★–—]/g,' ').replace(/\s*\n\s*/g,'. ').replace(/\s{2,}/g,' ').replace(/\.\s*\./g,'.').trim(); }
+        .replace(/\s*\n\s*/g,'. ')          // line breaks -> sentence pause
+        .replace(/\s*[–—]\s*/g,'. ')         // en/em dashes -> a brief pause before the next section (NOT hyphens like 6-on-5)
+        .replace(/[•▶★]/g,' ')               // bullets / markers -> space
+        .replace(/\s{2,}/g,' ')
+        .replace(/\.\s*\./g,'.')             // collapse doubled periods
+        .replace(/\s+\./g,'.')               // no space before a period
+        .trim(); }
     function stop(){ if(!supported) return; try{ window.speechSynthesis.cancel(); }catch(e){} }
     function speak(text){
       if(!supported || !enabled || !unlocked) return;
