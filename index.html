@@ -10408,7 +10408,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
      speaker toggle in the nav mutes/unmutes; default ON. */
   PX.tts = (function(){
     const supported = (typeof window!=='undefined') && ('speechSynthesis' in window) && (typeof SpeechSynthesisUtterance!=='undefined');
-    let enabled = true, unlocked = false, voice = null;
+    let enabled = false, unlocked = false, voice = null;   // OFF by default — the user opts in on the welcome step
     function pickVoice(){
       try{
         const vs = window.speechSynthesis.getVoices()||[]; if(!vs.length) return;
@@ -10422,7 +10422,8 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     }
     function forSpeech(t){ return String(t||'')
         .replace(/\s*\n\s*/g,'. ')          // line breaks -> sentence pause
-        .replace(/\s*[–—]\s*/g,'. ')         // en/em dashes -> a brief pause before the next section (NOT hyphens like 6-on-5)
+        .replace(/\s*[–—]\s*/g,'. ')         // en/em dashes -> a brief pause before the next section
+        .replace(/\s+-\s+/g,'. ')            // a hyphen used as a CONNECTOR ( - ) -> pause; NOT in-word hyphens (2-meter, 6-on-5)
         .replace(/[•▶★]/g,' ')               // bullets / markers -> space
         .replace(/\s{2,}/g,' ')
         .replace(/\.\s*\./g,'.')             // collapse doubled periods
@@ -10453,11 +10454,12 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   // visible to the reader (so animated steps read AFTER their reveal, not during).
   PX._speakCurrentInstruction = function(force){
     if(!PX.tts || !PX.tts.supported || !PX.tts.isEnabled()) return;
+    if(PX._noVoiceThisStep) return;   // the welcome / voice-intro step is never read aloud
     if(!force && PX._ttsSpokenForStep) return;
     const bn=document.getElementById('tutorialBanner'), el=document.getElementById('tutorialInstruction');
     if(!bn || !el) return;
-    const cs=getComputedStyle(bn);
-    if(cs.visibility==='hidden' || parseFloat(cs.opacity||'1') <= 0.5) return;   // box not shown yet
+    if(getComputedStyle(bn).visibility==='hidden') return;
+    if(bn.style.opacity==='0') return;   // intentionally hidden (animation in progress) — use the INLINE target, not the mid-fade computed value
     const t=(el.textContent||'').trim(); if(!t) return;
     PX._ttsSpokenForStep = true;
     PX.tts.speak(t);
@@ -11095,6 +11097,19 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   PX.buildLesson1Steps = function(){
     const steps=[];
 
+    // 1.0 Voice intro — the very first box. Offers to read the instructions aloud and
+    // highlights the (tappable) Voice button. Never read itself; the voice, if turned
+    // on here, begins with the NEXT box. Marked isPreStep so it shows "Welcome" and
+    // does not change the numbered step count.
+    if(PX.tts && PX.tts.supported){
+      const vintro = watch('You can have every instruction read out loud. To turn the voice on, tap the highlighted “Voice” button in the bottom-left. Prefer to read yourself? Just tap “Got it”. You can switch the voice on or off at any time.',
+        ()=>{ PX.clearActors(); PX.clearReferees(); PX.field.setPhase('water');
+          PX._noVoiceThisStep=true;                                   // this box is never narrated
+          setTimeout(function(){ if(PX._highlightTtsBtn) PX._highlightTtsBtn(true); }, 80); });   // pulse the button once the nav exists
+      vintro.isPreStep = true;
+      steps.push(vintro);
+    }
+
     // 1.1 Welcome — only water
     steps.push(watch('Welcome to Water Polo. Let’s start with the place where everything happens — the pool.',
       ()=>{ PX.clearActors(); PX.clearReferees(); PX.field.setPhase('water'); }));
@@ -11212,7 +11227,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   function wrapBannerReset(steps){
     steps.forEach(s=>{ const orig=s.onEnter; s.onEnter=function(){
       PX._manualScroll=false;   // every step re-activates auto-positioning (until the parent swipes again)
-      PX._ttsSpokenForStep=false; if(PX.tts) PX.tts.stop();   // new step -> stop prior voiceover, allow a fresh read
+      PX._ttsSpokenForStep=false; PX._noVoiceThisStep=false; if(PX.tts) PX.tts.stop(); if(PX._highlightTtsBtn) PX._highlightTtsBtn(false);   // new step -> stop prior voiceover, clear any button highlight, allow a fresh read
       const bn=document.getElementById('tutorialBanner'); if(bn){ boxShowNow(); bn.classList.remove('pxWide'); } if(typeof orig==='function') orig.call(this);
       // Plain watch steps keep the box visible from here, so read once onEnter has
       // settled; animated steps hid the box in onEnter and will read on their reveal.
@@ -13400,7 +13415,9 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     const s=document.createElement('style'); s.id='pxBannerCss';
     // The instruction box sits in the TOP-LEFT corner on EVERY device (mouse or touch)
     // so it never covers the centered shot clock at the top.
-    s.textContent = 'body.pxParentMode #tutorialBanner{ left:12px !important; top:12px !important; right:auto !important; bottom:auto !important; transform:none !important; transition:opacity .5s ease !important; max-width:min(46vw,420px) !important; }'
+    s.textContent = '@keyframes pxTtsHiPulse{ 0%,100%{ box-shadow:0 0 0 0 rgba(255,210,63,.75); } 50%{ box-shadow:0 0 0 9px rgba(255,210,63,0); } }'
+      + ' #pxTtsBtn.pxTtsHi{ animation:pxTtsHiPulse 1.1s ease-in-out infinite; background:#c8871a !important; color:#0b1a12 !important; font-weight:800 !important; }'
+      + ' body.pxParentMode #tutorialBanner{ left:12px !important; top:12px !important; right:auto !important; bottom:auto !important; transform:none !important; transition:opacity .5s ease !important; max-width:min(46vw,420px) !important; }'
       + ' body.pxParentMode.pxTouch #tutorialBanner{ left:8px !important; top:8px !important; right:auto !important; transform:none !important; max-width:min(64vw,340px) !important; }'
       + ' body.pxParentMode #tutorialExitBtn{ display:none !important; }'   // WP tutorial uses its own bottom-left nav, never the coach exit
       + ' body.pxParentMode .rotateHandle{ display:none !important; pointer-events:none !important; }'   // parents never rotate/spin players
@@ -13522,7 +13539,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     if(PX.tts && PX.tts.supported){
       const vb=make('button'); vb.id='pxTtsBtn';
       vb.style.cssText='font:700 11px system-ui;color:#fff;background:#1a6363;border:none;border-radius:8px;padding:5px 12px;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.28);text-align:left;touch-action:manipulation;pointer-events:auto;';
-      const vh=function(ev){ if(ev){ ev.preventDefault(); ev.stopPropagation(); } PX.tts._unlock(); PX.tts.toggle(); };
+      const vh=function(ev){ if(ev){ ev.preventDefault(); ev.stopPropagation(); } PX.tts._unlock(); PX.tts.toggle(); if(PX._highlightTtsBtn) PX._highlightTtsBtn(false); };
       vb.addEventListener('pointerup',vh); vb.addEventListener('click',vh);
       nav.appendChild(vb);
     }
@@ -13534,8 +13551,10 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     if(PX._updateTtsBtn) PX._updateTtsBtn();
   };
   PX._updateTtsBtn = function(){ const b=document.getElementById('pxTtsBtn'); if(!b || !PX.tts) return;
-    const on=PX.tts.isEnabled(); b.textContent = on?'🔊 Voice: on':'🔇 Voice: off'; b.style.opacity = on?'1':'.7';
-    b.title = on?'Voice instructions on — tap to mute':'Voice instructions off — tap to unmute'; };
+    const on=PX.tts.isEnabled(); b.textContent = on?'🔊 Voice: on':'🔇 Voice: off'; b.style.opacity = on?'1':'.85';
+    b.title = on?'Voice instructions on — tap to mute':'Voice instructions off — tap to turn on'; };
+  // Pulse the voice button (welcome step) so the parent notices they can turn it on.
+  PX._highlightTtsBtn = function(on){ const b=document.getElementById('pxTtsBtn'); if(!b) return; b.classList.toggle('pxTtsHi', !!on); };
   // Clean up any live interaction (shoot / tap / choice / goal-zoom / follow /
   // selection / flash) so jumping between steps never leaves a widget behind.
   PX._cleanupStepUI = function(){
@@ -13752,7 +13771,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     PX._lessonStarts=[0, l1.length, l1.length+l2.length, l1.length+l2.length+l3.length, l1.length+l2.length+l3.length+l4.length, l1.length+l2.length+l3.length+l4.length+l5.length];   // L2 / L3 / L4 / L5 / L6 offsets
     // Each lesson opens with its own "LESSON X — TITLE" headline card.
     const lessonArrays=[l1,l2,l3,l4,l5,l6];
-    lessonArrays.forEach((arr,i)=>{ if(arr && arr.length){ const t=(PX._lessonTitles[i]||('Lesson '+(i+1))).toUpperCase().replace(/—/g,'–'); withLessonHeadline(arr[0], t); } });
+    lessonArrays.forEach((arr,i)=>{ if(arr && arr.length){ const t=(PX._lessonTitles[i]||('Lesson '+(i+1))).toUpperCase().replace(/—/g,'–'); const first=arr.find(s=>!s.isPreStep)||arr[0]; withLessonHeadline(first, t); } });
     const allSteps = wrapBannerReset([].concat(l1, l2, l3, l4, l5, l6));
     if(typeof startTutorial==='function'){
       startTutorial(allSteps, { onComplete:function(){ PX.hideNav(); PX.showWpEnd('complete'); } });
