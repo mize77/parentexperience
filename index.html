@@ -13037,25 +13037,31 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       PX.exitFrontCourt(); PX._viewBias=0; PX.followBall(true);   // whole pool in view for the length-of-pool break
       PX.flash('BLUE WINS THE BALL','good',1200);
       await delay(800);
-      const b5y=9.5;
-      // #5's own marker ends exactly 4 m behind him; everyone else keeps swimming too,
-      // each in a DISTINCT lane so nobody swims on top of anyone.
-      const mark = nearestWhite(b5) || whites[0];
-      const wRest = whites.filter(w=>w!==mark);
-      const wB2 = wRest[0] || null;                                // marks the passer
-      const wLane = wRest.slice(1);                               // whites for the 4 lane pairs
-      const bRest = blues.filter(b=>b!==b5 && b!==b2);
-      const laneY=[6.0, 14.0, 16.5, 19.0];
+      const b5y=15;   // #5 breaks away on the BOTTOM side, so the keeper deflects the shot
+                      // out the bottom corner and the corner is taken there — well clear of
+                      // the top-left instruction box.
       const wgk=whiteGoalie(), bgk=blueGoalie();
+      // Each Blue is paired with the White of the same cap. The spread is deliberately
+      // NOT tidy: #5 breaks away (4 m); #2 and #7 keep a slight advantage (ahead of and
+      // just to the side of their man); #3/#4/#6 sit ~1.5 m and slightly beside their man.
+      // (y-values mirrored around the centre line so the breakaway is on the bottom.)
+      const B=c=>blueByCap(c), W=c=>whiteByCap(c);
+      const plan=[
+        { b:B(5), w:W(5), bf:{x:23,   y:15  }, wf:{x:19.0, y:15  } },  // #5 breakaway — 4 m clear (bottom)
+        { b:B(2), w:W(2), bf:{x:18.0, y:12.6}, wf:{x:16.5, y:11.7} },  // #2 advantage (the passer)
+        { b:B(7), w:W(7), bf:{x:19.5, y:18.6}, wf:{x:18.0, y:17.7} },  // #7 advantage
+        { b:B(3), w:W(3), bf:{x:19.0, y:10.1}, wf:{x:18.5, y:8.8 } },  // #3 ~1.5 m, beside his man
+        { b:B(4), w:W(4), bf:{x:19.0, y:7.4 }, wf:{x:18.5, y:6.1 } },  // #4 ~1.5 m, beside his man
+        { b:B(6), w:W(6), bf:{x:19.0, y:4.7 }, wf:{x:18.5, y:3.5 } }   // #6 ~1.5 m, beside his man
+      ].filter(pl=>pl.b);
 
       // ---- Phase A: everyone swims up. #5 sprints to ~10 m out; #2 trails to the midline.
       const a=[];
-      a.push(swim(b5, {x:17,   y:b5y}, 2500, 'h'));
-      a.push(swim(b2, {x:13,   y:12 }, 2500, 'h'));
-      a.push(swim(mark, {x:14.5, y:b5y}, 2500, 'h'));                                   // #5's marker chases in his lane
-      if(wB2) a.push(swim(wB2, {x:11.8, y:12 }, 2500, 'h'));
-      bRest.forEach((b,i)=>{ a.push(swim(b, {x:13.5, y:laneY[i%laneY.length]}, 2500, 'h')); });
-      wLane.forEach((w,i)=>{ a.push(swim(w, {x:12.2, y:laneY[i%laneY.length]}, 2500, 'h')); });   // white a touch behind in the same lane
+      plan.forEach(pl=>{
+        const bxA=(pl.b===b5)?17:(pl.b===b2)?13:13.5, wxA=(pl.b===b5)?14.5:(pl.b===b2)?11.8:12.2;
+        a.push(swim(pl.b, {x:bxA, y:pl.bf.y}, 2500, 'h'));
+        if(pl.w) a.push(swim(pl.w, {x:wxA, y:pl.wf.y}, 2500, 'h'));
+      });
       if(wgk) a.push(swimVerticalTrack(wgk, {x:WHITE_GOAL.x-0.7, y:CY}, 2500, {x:17,y:b5y}));      // keeper drops in, tracking the ball
       if(bgk) a.push(swimSettle(bgk, {x:BLUE_GOAL.x+2, y:CY}, 2500, 90, 'h'));
       await Promise.all(a);
@@ -13065,22 +13071,17 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       await passBallTo(b5, 650);
       if(typeof ballCarrier!=='undefined') ballCarrier=b5; if(typeof moveBallTo==='function') moveBallTo(b5,'left');
 
-      // ---- Phase B: #5 drives in to 4 m; EVERYONE keeps swimming (no freeze). #5 ends
-      // 4 m clear of his marker; everyone else is 3–6 m further back than #5.
+      // ---- Phase B: EVERYONE keeps swimming into the final spread; #5 drives in to 4 m.
       const bk=[];
-      bk.push(swim(b5, {x:23,   y:b5y}, 1800, 'h'));
-      bk.push(swim(mark, {x:19, y:b5y}, 1800, 'h'));                                    // 4 m behind #5
-      bk.push(swim(b2, {x:17.5, y:12 }, 1800, 'h'));                                    // passer keeps swimming up, stays back
-      if(wB2) bk.push(swim(wB2, {x:16.5, y:12 }, 1800, 'h'));
-      bRest.forEach((b,i)=>{ bk.push(swim(b, {x:19.3, y:laneY[i%laneY.length]}, 1800, 'h')); });   // ~3.7 m back
-      wLane.forEach((w,i)=>{ bk.push(swim(w, {x:18.0, y:laneY[i%laneY.length]}, 1800, 'h')); });    // chasing, ~5 m back
-      if(wgk) bk.push(swimVerticalTrack(wgk, {x:WHITE_GOAL.x-0.6, y:CY}, 1800, {x:23,y:b5y}));      // keeper smart-tracks the shooter
+      plan.forEach(pl=>{ bk.push(swim(pl.b, pl.bf, 1800, 'h')); if(pl.w) bk.push(swim(pl.w, pl.wf, 1800, 'h')); });
+      if(wgk) bk.push(swimVerticalTrack(wgk, {x:WHITE_GOAL.x-0.6, y:CY}, 1800, {x:23,y:b5y}));
       await Promise.all(bk);
 
-      // #5 set, vertical, facing the goal with the ball; keeper faces him for the block.
+      // #5 set, vertical, facing the goal with the ball; keeper SMART-positioned (default
+      // rule: edges toward the shooter's side within the posts, covering the near angle).
       b5.dataset.pose='v'; b5.dataset.rot=faceTo(23,b5y, WHITE_GOAL.x, WHITE_GOAL.y); if(typeof place==='function') place(b5);
       if(typeof moveBallTo==='function') moveBallTo(b5,'right');
-      if(wgk){ wgk.dataset.pose='v'; wgk.dataset.rot=faceTo(+wgk.dataset.x,+wgk.dataset.y, 23, b5y); if(typeof place==='function') place(wgk); }   // smart-position: face the shooter
+      if(wgk){ wgk.dataset.x=WHITE_GOAL.x-0.6; gkTrackBall(wgk, {x:+b5.dataset.x, y:+b5.dataset.y}); }
       PX._l6shooter=b5;
       PX.enterFrontCourt(); PX.followGoal('white');
       PX.flash('BREAKAWAY — 4 M OUT','good',1300);
@@ -13151,43 +13152,59 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   // 6.5 setup — after the corner, both teams set up again. Blue works the ball around
   // the set offense; the White defenders stay VERTICAL, step goal-side and raise a
   // blocking arm so the shot-block corridors show. Leaves a Blue shooter with the ball.
-  function l6SetOffenseBlocks(){
+  // 6.4 setup — the corner throw is set and STOPS with the taker holding the ball at the
+  // 2 m mark by the sideline (side the ball went out), red-circled, so the box can explain
+  // the corner rule. The taker + one defender are the pair from the field zone closest to
+  // that corner. The keeper is smart-positioned toward the taker.
+  function l6CornerSetup(){
     return (async function(){
       stopFollow(); clearHoldCinematic();
       await PX.setupWhiteHalf();                                    // regular offensive positions (Blue attacking the white goal)
       PX.centerDuel(false); if(PX.setCenterDuel) PX.setCenterDuel(null,null,null);
       PX.enterFrontCourt(); PX.followGoal('white');
-      // A corner throw is taken from the 2 m mark right next to the sideline, on the side
-      // the ball went out (upper side here). The taker + one defender are the pair that
-      // would otherwise sit in the field zone closest to that corner, so we move exactly
-      // that pair to the corner: taker on the sideline 2 m mark facing the goal (ball in
-      // his right hand), his defender a touch goal-side of him.
       const topSide = (PX._l6outSide!=='bottom');
       const cornerPt = { x: WHITE_GOAL.x - 2, y: topSide ? (M.fieldY + 1.6) : (M.fieldY + M.fieldH - 1.6) };
-      const starter = blueFields().slice().sort((a,b)=>
+      const taker = blueFields().slice().sort((a,b)=>
         Math.hypot((+a.dataset.x)-cornerPt.x,(+a.dataset.y)-cornerPt.y) - Math.hypot((+b.dataset.x)-cornerPt.x,(+b.dataset.y)-cornerPt.y))[0] || blueFields()[0];
-      const starterDef = starter ? nearestWhite(starter) : null;
-      if(starter){
-        starter.dataset.pose='v'; starter.dataset.x=cornerPt.x; starter.dataset.y=cornerPt.y;
-        starter.dataset.rot=faceTo(cornerPt.x,cornerPt.y, WHITE_GOAL.x, WHITE_GOAL.y);
-        if(typeof place==='function') place(starter);
-        if(typeof ballCarrier!=='undefined') ballCarrier=starter;
-        if(typeof moveBallTo==='function') moveBallTo(starter,'right');
+      const takerDef = taker ? nearestWhite(taker) : null;
+      if(taker){
+        taker.dataset.pose='v'; taker.dataset.x=cornerPt.x; taker.dataset.y=cornerPt.y;
+        taker.dataset.rot=faceTo(cornerPt.x,cornerPt.y, WHITE_GOAL.x, WHITE_GOAL.y);
+        if(typeof place==='function') place(taker);
+        if(typeof ballCarrier!=='undefined') ballCarrier=taker;
+        if(typeof moveBallTo==='function') moveBallTo(taker,'right');
       }
-      if(starterDef){
+      if(takerDef){
         const dx=WHITE_GOAL.x-cornerPt.x, dy=WHITE_GOAL.y-cornerPt.y, dl=Math.hypot(dx,dy)||1;
-        starterDef.dataset.pose='v';
-        starterDef.dataset.x = cornerPt.x + dx/dl*1.4; starterDef.dataset.y = cornerPt.y + dy/dl*1.4;   // goal-side of the taker
-        starterDef.dataset.rot = faceTo(+starterDef.dataset.x,+starterDef.dataset.y, cornerPt.x, cornerPt.y);
-        if(typeof place==='function') place(starterDef);
+        takerDef.dataset.pose='v';
+        takerDef.dataset.x = cornerPt.x + dx/dl*1.4; takerDef.dataset.y = cornerPt.y + dy/dl*1.4;   // goal-side of the taker
+        takerDef.dataset.rot = faceTo(+takerDef.dataset.x,+takerDef.dataset.y, cornerPt.x, cornerPt.y);
+        if(typeof place==='function') place(takerDef);
       }
       PX.updateTeamLayering();
-      // Work the ball to the shooter (Blue #4). White #4 is the defender who steps
-      // goal-side of him with a raised arm, so the shot later deflects off HIM.
-      let shooter = blueByCap(4) || blueFields().find(b=>b!==starter) || starter;
-      if(shooter===starter) shooter = blueFields().find(b=>b!==starter) || starter;
-      const seq=[ blueByCap(6), shooter ].filter(Boolean).filter(p=>p!==starter);
-      let holder=starter;
+      const wgk=whiteGoalie(); if(wgk){ wgk.dataset.x=WHITE_GOAL.x-0.6; gkTrackBall(wgk, {x:cornerPt.x, y:cornerPt.y}); }   // smart keeper toward the corner
+      PX._l6corner = { taker:taker, pt:cornerPt };
+      PX.showShotClock(18);
+      if(PX.centerOnBall) PX.centerOnBall();
+      // STOP: the taker holds the ball at the corner, marked with a red circle.
+      redRingOn(taker);
+      await delay(300);
+    })();
+  }
+  // 6.5 continue — the corner is executed: the ball is worked into the set offense to the
+  // shooter (Blue #4), the defenders step goal-side vertical with shot-block corridors up,
+  // and it STOPS ready to shoot. Keeper stays smart-positioned toward the ball.
+  function l6CornerContinue(){
+    return (async function(){
+      stopFollow(); clearHoldCinematic();   // also removes the red corner ring
+      const c = PX._l6corner || {};
+      const taker = (c.taker && c.taker.isConnected) ? c.taker
+        : ((typeof ballCarrier!=='undefined'&&ballCarrier&&ballCarrier.dataset.team==='blue') ? ballCarrier : blueFields()[0]);
+      PX.enterFrontCourt(); PX.followGoal('white');
+      let shooter = blueByCap(4) || blueFields().find(b=>b!==taker) || taker;
+      if(shooter===taker) shooter = blueFields().find(b=>b!==taker) || taker;
+      const seq=[ blueByCap(6), shooter ].filter(Boolean).filter(p=>p!==taker);
+      let holder=taker;
       for(const t of seq){
         if(!t || t===holder) continue;
         await passBallTo(t, 560); holder=t;
@@ -13199,9 +13216,9 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       }
       if(holder){ if(typeof ballCarrier!=='undefined') ballCarrier=holder; if(typeof moveBallTo==='function') moveBallTo(holder,'right'); PX.updateTeamLayering(); }
       PX._l6shooter2=holder;
+      const wgk=whiteGoalie(); if(wgk && holder){ wgk.dataset.x=WHITE_GOAL.x-0.6; gkTrackBall(wgk, {x:+holder.dataset.x, y:+holder.dataset.y}); }   // smart keeper toward the shooter
       if(PX.centerOnBall) PX.centerOnBall();
-      PX.flash('SET OFFENSE','good',1200);
-      await delay(300);
+      await delay(200);
     })();
   }
 
@@ -13235,13 +13252,14 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       autoComplete:function(){ PX.hideShootButton(); resolveL6Shot1(); }
     });
 
-    // 6.4 — the corner-throw rule (keeper blocks the ball out of play).
-    steps.push(watch('The goalie blocked the ball and deflected it out over the goal-line. When the goalkeeper blocks the ball out of play, the attack keeps possession and restarts with a corner throw from the 2-meter mark, and the shot clock resets to 18 seconds. A corner is taken like a free throw from outside 6 meters — a direct shot on goal is allowed. Both teams set up again.',
-      ()=>{ PX.followGoal('white'); PX.showShotClock(18); PX.flash('CORNER — SHOT CLOCK 18','',1500); }));
+    // 6.4 — the corner-throw rule. The corner is set up and STOPS with the taker holding
+    // the ball at the 2 m sideline mark (red-circled); then the box explains the rule.
+    steps.push(animatedWatch('The goalie blocked the ball and deflected it out over the goal-line. When the goalkeeper blocks the ball out of play, the attack keeps possession and restarts with a corner throw — taken from the 2-meter mark next to the sideline, on the side the ball went out (the player circled in red). The shot clock resets to 18 seconds, and a corner is taken like a free throw from outside 6 meters, so a direct shot on goal is allowed.',
+      function(){ return l6CornerSetup(); }));
 
-    // 6.5 — the set offense, with defenders vertical and shot-block corridors up.
+    // 6.5 — the corner is executed and worked into the set offense; STOPS ready to shoot.
     steps.push(animatedWatch('Blue tries to use the new 18 seconds to create another good scoring opportunity.',
-      function(){ return l6SetOffenseBlocks(); }));
+      function(){ return l6CornerContinue(); }));
 
     // 6.6 YOU TRY — Blue shoots again; this time a DEFENDER deflects it out (turnover).
     function resolveL6Shot2(){ if(PX._l6s2) return; PX._l6s2='running';
