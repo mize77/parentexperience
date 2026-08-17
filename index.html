@@ -11534,7 +11534,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   // moves squared to the attacker, head toward the attacker's head so they almost
   // match, then a spotlight and a red circle highlight the situation.
   function dist2(el, pt){ const dx=(+el.dataset.x)-pt.x, dy=(+el.dataset.y)-pt.y; return dx*dx+dy*dy; }
-  function clearHoldCinematic(){ ['pxHoldSpot','pxHoldCircle'].forEach(id=>{ const e=document.getElementById(id); if(e) e.remove(); }); if(PX._holdT) clearTimeout(PX._holdT); }
+  function clearHoldCinematic(){ ['pxHoldSpot','pxHoldCircle','pxRedRing'].forEach(id=>{ const e=document.getElementById(id); if(e) e.remove(); }); if(PX._holdT) clearTimeout(PX._holdT); }
   function spotlightCircle(cx, cy, r, withArrow){
     clearHoldCinematic(); const bd=boardEl(); if(!bd) return;
     const spot=fcSvgLayer(200); spot.id='pxHoldSpot';
@@ -13037,27 +13037,50 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       PX.exitFrontCourt(); PX._viewBias=0; PX.followBall(true);   // whole pool in view for the length-of-pool break
       PX.flash('BLUE WINS THE BALL','good',1200);
       await delay(800);
-      const rest = blues.filter(b=>b!==b5 && b!==b2);
-      const restY=[7.5, 10.5, 13.5, 16.5];
       const b5y=9.5;
-      const anims=[];
-      anims.push(swim(b5, {x:17, y:b5y}, 2600, 'h'));                                   // #5 sprints to ~10 m from the white goal
-      anims.push(swim(b2, {x:14.5, y:12.5}, 2600, 'h'));                                // #2 trails to the midline with the ball
-      // matched pairs: some Blue slightly ahead, some slightly behind their White man.
-      rest.forEach((b,i)=>{ const lead=(i===0);                                          // one Blue nips slightly ahead
-        anims.push(swim(b, {x: lead?16.2:15.0, y:restY[i%restY.length]}, 2600, 'h'));
-        const w=whites[i]; if(w) anims.push(swim(w, {x:15.6, y:restY[i%restY.length]}, 2600, 'h')); });
-      const wgk=whiteGoalie(); if(wgk) anims.push(swimSettle(wgk, {x:WHITE_GOAL.x-0.7, y:CY}, 2600, 270, 'v'));   // white keeper drops in
-      const bgk=blueGoalie(); if(bgk) anims.push(swimSettle(bgk, {x:BLUE_GOAL.x+2, y:CY}, 2600, 90, 'h'));        // blue keeper trails up
-      await Promise.all(anims);
-      // #5 is ~10 m out -> #2 hits the long pass.
-      PX.flash('LONG PASS','good',1100);
-      await passBallTo(b5, 700);
+      // #5's own marker ends exactly 4 m behind him; everyone else keeps swimming too,
+      // each in a DISTINCT lane so nobody swims on top of anyone.
+      const mark = nearestWhite(b5) || whites[0];
+      const wRest = whites.filter(w=>w!==mark);
+      const wB2 = wRest[0] || null;                                // marks the passer
+      const wLane = wRest.slice(1);                               // whites for the 4 lane pairs
+      const bRest = blues.filter(b=>b!==b5 && b!==b2);
+      const laneY=[6.0, 14.0, 16.5, 19.0];
+      const wgk=whiteGoalie(), bgk=blueGoalie();
+
+      // ---- Phase A: everyone swims up. #5 sprints to ~10 m out; #2 trails to the midline.
+      const a=[];
+      a.push(swim(b5, {x:17,   y:b5y}, 2500, 'h'));
+      a.push(swim(b2, {x:13,   y:12 }, 2500, 'h'));
+      a.push(swim(mark, {x:14.5, y:b5y}, 2500, 'h'));                                   // #5's marker chases in his lane
+      if(wB2) a.push(swim(wB2, {x:11.8, y:12 }, 2500, 'h'));
+      bRest.forEach((b,i)=>{ a.push(swim(b, {x:13.5, y:laneY[i%laneY.length]}, 2500, 'h')); });
+      wLane.forEach((w,i)=>{ a.push(swim(w, {x:12.2, y:laneY[i%laneY.length]}, 2500, 'h')); });   // white a touch behind in the same lane
+      if(wgk) a.push(swimVerticalTrack(wgk, {x:WHITE_GOAL.x-0.7, y:CY}, 2500, {x:17,y:b5y}));      // keeper drops in, tracking the ball
+      if(bgk) a.push(swimSettle(bgk, {x:BLUE_GOAL.x+2, y:CY}, 2500, 90, 'h'));
+      await Promise.all(a);
+
+      // ---- the long pass from #2 to #5.
+      PX.flash('LONG PASS','good',1000);
+      await passBallTo(b5, 650);
       if(typeof ballCarrier!=='undefined') ballCarrier=b5; if(typeof moveBallTo==='function') moveBallTo(b5,'left');
-      // #5 keeps swimming in on the keeper, to ~4 m out.
-      await swim(b5, {x:23, y:b5y}, 1700, 'h');
+
+      // ---- Phase B: #5 drives in to 4 m; EVERYONE keeps swimming (no freeze). #5 ends
+      // 4 m clear of his marker; everyone else is 3–6 m further back than #5.
+      const bk=[];
+      bk.push(swim(b5, {x:23,   y:b5y}, 1800, 'h'));
+      bk.push(swim(mark, {x:19, y:b5y}, 1800, 'h'));                                    // 4 m behind #5
+      bk.push(swim(b2, {x:17.5, y:12 }, 1800, 'h'));                                    // passer keeps swimming up, stays back
+      if(wB2) bk.push(swim(wB2, {x:16.5, y:12 }, 1800, 'h'));
+      bRest.forEach((b,i)=>{ bk.push(swim(b, {x:19.3, y:laneY[i%laneY.length]}, 1800, 'h')); });   // ~3.7 m back
+      wLane.forEach((w,i)=>{ bk.push(swim(w, {x:18.0, y:laneY[i%laneY.length]}, 1800, 'h')); });    // chasing, ~5 m back
+      if(wgk) bk.push(swimVerticalTrack(wgk, {x:WHITE_GOAL.x-0.6, y:CY}, 1800, {x:23,y:b5y}));      // keeper smart-tracks the shooter
+      await Promise.all(bk);
+
+      // #5 set, vertical, facing the goal with the ball; keeper faces him for the block.
       b5.dataset.pose='v'; b5.dataset.rot=faceTo(23,b5y, WHITE_GOAL.x, WHITE_GOAL.y); if(typeof place==='function') place(b5);
       if(typeof moveBallTo==='function') moveBallTo(b5,'right');
+      if(wgk){ wgk.dataset.pose='v'; wgk.dataset.rot=faceTo(+wgk.dataset.x,+wgk.dataset.y, 23, b5y); if(typeof place==='function') place(wgk); }   // smart-position: face the shooter
       PX._l6shooter=b5;
       PX.enterFrontCourt(); PX.followGoal('white');
       PX.flash('BREAKAWAY — 4 M OUT','good',1300);
@@ -13090,13 +13113,20 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   function defenderDeflectOutTurnover(){
     return new Promise(function(res){
       const sh=PX._l6shooter2||((typeof ballCarrier!=='undefined'&&ballCarrier&&ballCarrier.dataset.team==='blue')?ballCarrier:null)||blueByCap(4)||blueFields()[0];
-      const from = sh?{x:+sh.dataset.x,y:+sh.dataset.y}:{x:22,y:13.5};
+      const from = sh?{x:+sh.dataset.x,y:+sh.dataset.y}:{x:22,y:9.5};
       if(typeof ballCarrier!=='undefined') ballCarrier=null;
-      // deflection point on the shot line, roughly where the nearest defender's arm is.
-      const defPt={ x: from.x+(WHITE_GOAL.x-from.x)*0.5, y: from.y+(CY-from.y)*0.35 };
-      tween((x,y)=>{ if(typeof ball!=='undefined'&&ball){ ball.dataset.x=x; ball.dataset.y=y; if(typeof placeBall==='function') placeBall(); } }, from, defPt, 300, ()=>{
-        const outY = from.y>=CY ? 14.8 : 9.2;                       // kicked wide, out past the goal line on the far side
-        tween((x,y)=>{ if(typeof ball!=='undefined'&&ball){ ball.dataset.x=x; ball.dataset.y=y; if(typeof placeBall==='function') placeBall(); } }, defPt, {x:27.8, y:outY}, 460, ()=>{
+      // The ball changes direction EXACTLY at White #4's blocking arm (not 3 m past him).
+      const w4=whiteByCap(4);
+      let defPt;
+      if(w4){ let ap=null; try{ if(typeof armWorldPos==='function') ap=armWorldPos(w4, w4.dataset.blockArm||'left'); }catch(e){}
+        defPt = ap ? { x:ap.x, y:ap.y } : { x:+w4.dataset.x, y:+w4.dataset.y }; }
+      else defPt = { x: from.x+(WHITE_GOAL.x-from.x)*0.5, y: from.y+(CY-from.y)*0.35 };
+      // travel time proportional to the (short) distance to the arm, so the deflection
+      // reads as happening AT the defender, not after overshooting him.
+      const d1=Math.hypot(defPt.x-from.x, defPt.y-from.y);
+      tween((x,y)=>{ if(typeof ball!=='undefined'&&ball){ ball.dataset.x=x; ball.dataset.y=y; if(typeof placeBall==='function') placeBall(); } }, from, defPt, Math.max(180, Math.round(d1*130)), ()=>{
+        const outY = defPt.y>=CY ? 14.9 : 9.1;                      // kicked wide off the arm, out past the goal line
+        tween((x,y)=>{ if(typeof ball!=='undefined'&&ball){ ball.dataset.x=x; ball.dataset.y=y; if(typeof placeBall==='function') placeBall(); } }, defPt, {x:27.9, y:outY}, 460, ()=>{
           PX.flash('OUT — OFF THE DEFENDER','',1400);
           const wg=whiteGoalie();
           if(wg){ if(typeof ballCarrier!=='undefined') ballCarrier=wg; if(typeof moveBallTo==='function') moveBallTo(wg,'right'); PX.updateTeamLayering(); }   // white keeper restarts with the ball
@@ -13105,6 +13135,17 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       });
     });
   }
+  // Draw a persistent red ring around a player (front-court aware). Used to mark the
+  // keeper who now has possession after the turnover.
+  function redRingOn(el){
+    const bd=boardEl(); if(!bd||!el) return;
+    const old=document.getElementById('pxRedRing'); if(old) old.remove();
+    const cx=+el.dataset.x, cy=+el.dataset.y;
+    const circ=fcSvgLayer(201); circ.id='pxRedRing';
+    circ.innerHTML=fcWrap('<circle cx="'+cx+'" cy="'+cy+'" r="1.5" fill="none" stroke="#e8362a" stroke-width="0.24"/>');
+    bd.appendChild(circ); requestAnimationFrame(()=>{ circ.style.opacity='1'; });
+  }
+  PX.clearRedRing = function(){ const e=document.getElementById('pxRedRing'); if(e) e.remove(); };
 
   // 6.5 setup — after the corner, both teams set up again. Blue works the ball around
   // the set offense; the White defenders stay VERTICAL, step goal-side and raise a
@@ -13112,14 +13153,29 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
   function l6SetOffenseBlocks(){
     return (async function(){
       stopFollow(); clearHoldCinematic();
-      await PX.setupWhiteHalf();                                    // Blue sets up attacking the white goal
+      await PX.setupWhiteHalf();                                    // regular offensive positions (Blue attacking the white goal)
       PX.centerDuel(false); if(PX.setCenterDuel) PX.setCenterDuel(null,null,null);
       PX.enterFrontCourt(); PX.followGoal('white');
-      let holder=(typeof ballCarrier!=='undefined'&&ballCarrier&&ballCarrier.dataset.team==='blue')?ballCarrier:(blueByCap(2)||blueFields()[0]);
-      const seq=[ blueByCap(6), blueByCap(4) ].filter(Boolean).filter(p=>p!==holder);
+      // The play restarts with one Blue at the 2 m corner mark (the side the ball went
+      // out, y≈9.5), facing the goal, ball in his RIGHT hand.
+      const starter = blueByCap(2) || blueFields()[0];
+      if(starter){
+        starter.dataset.pose='v'; starter.dataset.x=25; starter.dataset.y=9.5;
+        starter.dataset.rot=faceTo(25,9.5, WHITE_GOAL.x, WHITE_GOAL.y);
+        if(typeof place==='function') place(starter);
+        if(typeof ballCarrier!=='undefined') ballCarrier=starter;
+        if(typeof moveBallTo==='function') moveBallTo(starter,'right');
+        PX.updateTeamLayering();
+      }
+      // Work the ball to the shooter (Blue #4). White #4 is the defender who steps
+      // goal-side of him with a raised arm, so the shot later deflects off HIM.
+      const shooter = blueByCap(4) || blueFields().find(b=>b!==starter) || starter;
+      const seq=[ blueByCap(6), shooter ].filter(Boolean).filter(p=>p!==starter);
+      let holder=starter;
       for(const t of seq){
+        if(!t || t===holder) continue;
         await passBallTo(t, 560); holder=t;
-        const def=nearestWhite(holder);
+        const def = (t===shooter && whiteByCap(4)) ? whiteByCap(4) : nearestWhite(holder);
         if(def){ const dx=WHITE_GOAL.x-(+holder.dataset.x), dy=WHITE_GOAL.y-(+holder.dataset.y), dl=Math.hypot(dx,dy)||1;
           await swimVerticalTrack(def, { x:(+holder.dataset.x)+dx/dl*1.2, y:(+holder.dataset.y)+dy/dl*1.2 }, 400, { x:+holder.dataset.x, y:+holder.dataset.y });
           def.dataset.blockArm=pickBlockArm(def, holder); if(typeof updatePlayerVisual==='function') updatePlayerVisual(def); PX.setShotBlockOn(true); }
@@ -13144,7 +13200,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
         PX.enterFrontCourt(); PX.followGoal('blue');
         if(!document.getElementById('pxRefTop')) PX.showReferees(); PX.startRefTracking();
         const c=whiteCenter(); if(c) spotlightCircle(+c.dataset.x, +c.dataset.y, 2.3, false);
-        return delay(1500).then(()=>{ PX.flash('THE CENTER','good',1400); });
+        return delay(1400);
       }));
 
     // 6.2 — the counterattack (fast break): Blue #5 breaks clear, Blue #2 hits the long pass.
@@ -13164,11 +13220,11 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
     });
 
     // 6.4 — the corner-throw rule (keeper blocks the ball out of play).
-    steps.push(watch('The keeper knocked the shot out over the goal line. When the goalkeeper blocks the ball out of play, the attack keeps possession and restarts with a corner throw from the 2-meter mark, and the shot clock resets to 18 seconds. A corner is taken like a free throw from outside 6 meters — a direct shot on goal is allowed. Both teams set up again.',
+    steps.push(watch('The goalie blocked the ball and deflected it out over the goal-line. When the goalkeeper blocks the ball out of play, the attack keeps possession and restarts with a corner throw from the 2-meter mark, and the shot clock resets to 18 seconds. A corner is taken like a free throw from outside 6 meters — a direct shot on goal is allowed. Both teams set up again.',
       ()=>{ PX.followGoal('white'); PX.showShotClock(18); PX.flash('CORNER — SHOT CLOCK 18','',1500); }));
 
     // 6.5 — the set offense, with defenders vertical and shot-block corridors up.
-    steps.push(animatedWatch('Blue works the ball around the set offense, patiently moving it to pull the defense apart. The defenders stay upright and step goal-side with a blocking arm raised — the shaded corridors show the shot lanes they are covering.',
+    steps.push(animatedWatch('Blue tries to use the new 18 seconds to create another good scoring opportunity.',
       function(){ return l6SetOffenseBlocks(); }));
 
     // 6.6 YOU TRY — Blue shoots again; this time a DEFENDER deflects it out (turnover).
@@ -13183,13 +13239,19 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       autoComplete:function(){ PX.hideShootButton(); resolveL6Shot2(); }
     });
 
-    // 6.7 — the turnover rule (ball out off a defender's arm).
+    // 6.7 — the turnover rule (ball out off a defender's arm). The keeper now has the
+    // ball (red-ringed); everyone else swims 3 m toward the other half, then it stops.
     steps.push(watch('This time the ball went out off a DEFENDER’s arm — and that changes things: possession switches to the other team. The game restarts with that team’s goalkeeper putting the ball back into play with a free throw inside his own 2-meter area.',
-      ()=>{ PX.followGoal('white'); PX.hideShotClock(); if(PX.clearShotBlocks) PX.clearShotBlocks(); }));
+      ()=>{ PX.hideShotClock(); if(PX.clearShotBlocks) PX.clearShotBlocks();
+        PX.enterFrontCourt(); if(PX.followGoal) PX.followGoal('white');
+        const wg=whiteGoalie();
+        if(wg){ if(typeof ballCarrier!=='undefined') ballCarrier=wg; if(typeof moveBallTo==='function') moveBallTo(wg,'right'); PX.updateTeamLayering(); redRingOn(wg); }
+        qa('.player').forEach(p=>{ if(p===wg) return; swim(p, { x:(+p.dataset.x)-3, y:+p.dataset.y }, 1400, 'h'); });   // 3 m toward the other half, then stop
+      }));
 
     // 6.8 — how a game ends.
     steps.push(watchLeadFlash('A match is four quarters. A clock counts down each one; when it reaches zero in the last quarter, the game ends and the team with more goals wins. If the score is tied, some competitions add extra time or a shoot-out.',
-      'FULL TIME', 'good', ()=>{ PX.hideShotClock(); }));
+      'FULL TIME', 'good', ()=>{ PX.hideShotClock(); if(PX.clearRedRing) PX.clearRedRing(); }));
 
     // 6.5 — round-up / you’re ready.
     steps.push(watchLeadFlash('YOU NOW KNOW THE GAME\n• The players and their positions, and who is on offense.\n• The shot clock, and how possession changes.\n• Ordinary fouls, exclusions and penalties.\n• The counterattack, the set offense, and how a match is won.\nEnjoy watching your player — you’re ready!',
