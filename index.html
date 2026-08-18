@@ -11249,9 +11249,30 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       const bn=document.getElementById('tutorialBanner'); if(bn){ boxShowNow(); bn.classList.remove('pxWide'); } if(typeof orig==='function') orig.call(this);
       // Plain watch steps keep the box visible from here, so read once onEnter has
       // settled; animated steps hid the box in onEnter and will read on their reveal.
-      setTimeout(function(){ try{ PX._speakCurrentInstruction && PX._speakCurrentInstruction(); }catch(e){} }, 0); }; });
+      // Runs AFTER the host's own renderStep (which writes a global "Step X of TOTAL"),
+      // so our per-lesson label wins. Also fire the voiceover once the box has settled.
+      setTimeout(function(){ try{ PX._updateStepLabel && PX._updateStepLabel(); }catch(e){} try{ PX._speakCurrentInstruction && PX._speakCurrentInstruction(); }catch(e){} }, 0); }; });
     return steps;
   }
+  // Replace the host's global "Step X of TOTAL" with a PER-LESSON label:
+  //   "Lesson 3 · Step 2 of 9"  — the count is the numbered steps needed to finish
+  //   THIS lesson, not the whole tutorial (less overwhelming, and it makes resuming a
+  //   half-finished lesson obvious). Pre-steps (the Welcome box) keep the "Welcome" label.
+  PX._updateStepLabel = function(){
+    try{
+      const el=document.getElementById('tutorialStepCount'); if(!el) return;
+      if(typeof tutorialSteps==='undefined' || typeof tutorialStepIndex==='undefined') return;
+      const steps=tutorialSteps, idx=tutorialStepIndex; if(idx==null || idx<0 || !steps || !steps[idx]) return;
+      if(steps[idx].isPreStep){ el.textContent='Welcome'; return; }   // leave the welcome pre-step as-is
+      const starts=(PX._lessonStarts||[0]).slice();
+      let L=0; for(let i=0;i<starts.length;i++){ if(idx>=starts[i]) L=i; }   // which lesson this index falls in
+      const from=starts[L], to=(L+1<starts.length)?starts[L+1]:steps.length;
+      let total=0, pos=0;
+      for(let i=from;i<to;i++){ if(steps[i] && !steps[i].isPreStep){ total++; if(i<=idx) pos=total; } }   // count only NUMBERED steps in this lesson
+      if(total<=0){ return; }
+      el.textContent='Lesson '+(L+1)+' · Step '+pos+' of '+total;
+    }catch(e){}
+  };
   // Open a lesson with a "LESSON X — TITLE" headline (mirrors the "LESSON X COMPLETE"
   // headline that closes each lesson). The headline is QUEUED first — the instruction
   // box stays hidden until it (and any of the step's own headline) clears, so a lesson
