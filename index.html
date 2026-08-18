@@ -10420,26 +10420,32 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
         voice = vs.slice().sort((a,b)=>score(b)-score(a))[0] || vs[0];
       }catch(e){}
     }
-    function forSpeech(t){ return String(t||'')
-        .replace(/\s*\n\s*/g,'. ')          // line breaks -> sentence pause
-        .replace(/\s*[–—]\s*/g,'. ')         // en/em dashes -> a brief pause before the next section
-        .replace(/\s+-\s+/g,'. ')            // a hyphen used as a CONNECTOR ( - ) -> pause; NOT in-word hyphens (2-meter, 6-on-5)
+    // Split the box text into speech CHUNKS at every hard pause point — line breaks,
+    // en/em dashes, and a hyphen used as a spaced CONNECTOR ( - ). Each chunk is spoken
+    // as its OWN utterance below, so the gap between utterances is a real, reliable pause
+    // on every engine (iOS included) — unlike a synthetic ". " inside one utterance, which
+    // engines skip when the next word is lowercase. In-word hyphens (2-meter, 6-on-5,
+    // ball-carrier) need whitespace on BOTH sides to split, so they stay intact.
+    function forSpeechChunks(t){ return String(t||'')
         .replace(/[•▶★]/g,' ')               // bullets / markers -> space
-        .replace(/\s{2,}/g,' ')
-        .replace(/\.\s*\./g,'.')             // collapse doubled periods
-        .replace(/\s+\./g,'.')               // no space before a period
-        .trim(); }
+        .split(/\s*\n\s*|\s*[–—]\s*|\s+-\s+/) // hard pause points -> separate chunks
+        .map(s=>s.replace(/\s{2,}/g,' ').trim())
+        .filter(Boolean); }
     function stop(){ if(!supported) return; try{ window.speechSynthesis.cancel(); }catch(e){} }
     function speak(text){
       if(!supported || !enabled || !unlocked) return;
-      const say = forSpeech(text); if(!say) return;
-      try{
-        window.speechSynthesis.cancel();
-        const u = new SpeechSynthesisUtterance(say);
-        if(!voice) pickVoice(); if(voice) u.voice = voice;
-        u.rate=1.0; u.pitch=1.0; u.volume=1.0; u.lang=(voice&&voice.lang)||'en-US';
-        window.speechSynthesis.speak(u);
-      }catch(e){}
+      const chunks = forSpeechChunks(text); if(!chunks.length) return;
+      try{ window.speechSynthesis.cancel(); }catch(e){}
+      if(!voice) pickVoice();
+      chunks.forEach(function(chunk){
+        let s = chunk; if(!/[.!?…]$/.test(s)) s += '.';   // end each chunk as a full sentence -> full-stop prosody + a clean gap before the next
+        try{
+          const u = new SpeechSynthesisUtterance(s);
+          if(voice) u.voice = voice;
+          u.rate=1.0; u.pitch=1.0; u.volume=1.0; u.lang=(voice&&voice.lang)||'en-US';
+          window.speechSynthesis.speak(u);
+        }catch(e){}
+      });
     }
     function unlock(){
       if(!supported || unlocked) return; unlocked = true;
