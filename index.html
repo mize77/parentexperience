@@ -11270,7 +11270,13 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
       let total=0, pos=0;
       for(let i=from;i<to;i++){ if(steps[i] && !steps[i].isPreStep){ total++; if(i<=idx) pos=total; } }   // count only NUMBERED steps in this lesson
       if(total<=0){ return; }
-      el.textContent='Lesson '+(L+1)+' · Step '+pos+' of '+total;
+      // "Lesson 3 · Possession & the Shot Clock · 2/9" — lesson number + the lesson's
+      // NAME (the part after the em-dash in _lessonTitles) + a compact pos/total count.
+      const title=(PX._lessonTitles && PX._lessonTitles[L]) || '';
+      const parts=title.split(/\s*[—–]\s*/);   // "Lesson 3 — Possession & the Shot Clock" -> ["Lesson 3","Possession …"]
+      const name=parts.length>1 ? parts.slice(1).join(' – ').trim() : '';
+      const head=name ? ('Lesson '+(L+1)+' · '+name) : ('Lesson '+(L+1));
+      el.textContent=head+' · '+pos+'/'+total;
     }catch(e){}
   };
   // Open a lesson with a "LESSON X — TITLE" headline (mirrors the "LESSON X COMPLETE"
