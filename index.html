@@ -10431,21 +10431,33 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeToolPanels()
         .split(/\s*\n\s*|\s*[–—]\s*|\s+-\s+/) // hard pause points -> separate chunks
         .map(s=>s.replace(/\s{2,}/g,' ').trim())
         .filter(Boolean); }
-    function stop(){ if(!supported) return; try{ window.speechSynthesis.cancel(); }catch(e){} }
+    function stop(){ if(!supported) return; try{ const ss=window.speechSynthesis; if(ss.speaking||ss.pending) ss.cancel(); }catch(e){} }   // only cancel real in-flight speech; an idle cancel() can swallow the NEXT utterance
     function speak(text){
       if(!supported || !enabled || !unlocked) return;
       const chunks = forSpeechChunks(text); if(!chunks.length) return;
-      try{ window.speechSynthesis.cancel(); }catch(e){}
+      const ss = window.speechSynthesis;
       if(!voice) pickVoice();
-      chunks.forEach(function(chunk){
-        let s = chunk; if(!/[.!?…]$/.test(s)) s += '.';   // end each chunk as a full sentence -> full-stop prosody + a clean gap before the next
-        try{
-          const u = new SpeechSynthesisUtterance(s);
-          if(voice) u.voice = voice;
-          u.rate=1.0; u.pitch=1.0; u.volume=1.0; u.lang=(voice&&voice.lang)||'en-US';
-          window.speechSynthesis.speak(u);
-        }catch(e){}
-      });
+      const enqueue=function(){
+        chunks.forEach(function(chunk){
+          let s = chunk; if(!/[.!?…]$/.test(s)) s += '.';   // end each chunk as a full sentence -> full-stop prosody + a clean gap before the next
+          try{
+            const u = new SpeechSynthesisUtterance(s);
+            if(voice) u.voice = voice;
+            u.rate=1.0; u.pitch=1.0; u.volume=1.0; u.lang=(voice&&voice.lang)||'en-US';
+            ss.speak(u);
+          }catch(e){}
+        });
+        try{ if(ss.paused) ss.resume(); }catch(e){}   // Chrome sometimes parks a fresh queue in a paused state
+      };
+      // IMPORTANT: only cancel() when something is actually playing/queued. Calling cancel()
+      // on an IDLE engine swallows the very next utterance you queue (a known Web Speech bug)
+      // — that is why the FIRST read after opt-in (engine idle, right after the unlock warm-up)
+      // was silent while later reads worked. When we DO need to cancel, defer the re-queue a beat
+      // so the async cancel can't eat it either.
+      try{
+        if(ss.speaking || ss.pending){ ss.cancel(); setTimeout(enqueue, 60); }
+        else enqueue();
+      }catch(e){ try{ enqueue(); }catch(_){ } }
     }
     function unlock(){
       if(!supported || unlocked) return; unlocked = true;
